@@ -850,16 +850,16 @@
             const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
-        <meta charset="UTF-8">
-        <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
-        <link rel="stylesheet" href="style.css">
+            <meta charset="UTF-8">
+            <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
+            <link rel="stylesheet" href="style.css">
 </head>
 <body>
-        <div class="container">
-            <h1>Solar Analytics Report</h1>
-            <p>Generated: ${new Date().toLocaleString()}</p>
-            ${document.querySelector('.container').innerHTML}
-        </div>
+            <div class="container">
+                <h1>Solar Analytics Report</h1>
+                <p>Generated: ${new Date().toLocaleString()}</p>
+                ${document.querySelector('.container').innerHTML}
+            </div>
 </body>
 </html>`;
 
@@ -936,5 +936,8 @@
             showStatus('✓ ROI calculations updated', 'success');
         }
     </script>
+
+    <!-- Tooltip behavior script (create file below at js/tooltip.js) -->
+    <script src="js/tooltip.js"></script>
 </body>
 </html>
