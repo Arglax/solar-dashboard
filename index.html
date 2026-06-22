@@ -1,0 +1,940 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Analytics | PV + BESS Monitor</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <a href="#" class="header-brand">
+                <span class="header-logo">⚡</span>
+                <div>
+                    <div class="header-title">Solar Analytics</div>
+                    <div class="header-subtitle">PV + BESS Intelligence Platform</div>
+                </div>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Upload Section -->
+        <section class="section">
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📊</div>
+                    <div>
+                        <div class="upload-text">
+                            <strong>Import Solar Data</strong>
+                            Click or drag CSV file here
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted);">
+                            Daily or Weekly reports from Sungrow
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="selectFileBtn">Choose CSV File</button>
+                    <input type="file" id="csvFile" accept=".csv" />
+                </div>
+            </div>
+            <div id="statusMessage" class="status-message"></div>
+        </section>
+
+        <!-- Energy Flow Diagram -->
+        <section class="section" id="energyFlowSection" style="display: none;">
+            <h2 class="section-title">
+                System Overview
+                <span class="info-icon" data-tooltip="Real-time snapshot of energy flowing through your solar system. Shows current generation, storage, and usage.">i</span>
+            </h2>
+            <div class="energy-flow-container">
+                <div class="energy-flow">
+                    <div class="energy-node pv">
+                        <div class="energy-node-icon">☀️</div>
+                        <div class="energy-node-label">Solar</div>
+                        <div class="energy-node-value" id="flowPV">0 W</div>
+                    </div>
+                    <div class="energy-node battery">
+                        <div class="energy-node-icon">🔋</div>
+                        <div class="energy-node-label">Battery</div>
+                        <div class="energy-node-value" id="flowBattery">0%</div>
+                    </div>
+                    <div class="energy-node load">
+                        <div class="energy-node-icon">⚙️</div>
+                        <div class="energy-node-label">Load</div>
+                        <div class="energy-node-value" id="flowLoad">0 W</div>
+                    </div>
+                    <div class="energy-node grid">
+                        <div class="energy-node-icon">🔌</div>
+                        <div class="energy-node-label">Grid</div>
+                        <div class="energy-node-value" id="flowGrid">0 W</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Key Metrics -->
+        <section class="section" id="metricsSection" style="display: none;">
+            <h2 class="section-title">Current Status & Performance</h2>
+
+            <!-- Toggle Controls for Metrics -->
+            <div class="toggle-group" style="margin-bottom: var(--spacing-lg);">
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggleBasic" checked data-group="basic">
+                    <span>Basic Metrics</span>
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="toggleAdvanced" checked data-group="advanced">
+                    <span>Advanced Analytics</span>
+                </label>
+            </div>
+
+            <div class="metrics-grid" id="metricsGrid">
+                <!-- Basic Metrics Group -->
+                <div class="metric-card solar" data-metric-group="basic">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">☀️</div>
+                            <div class="metric-label">PV Generation</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Current power being generated by your solar panels in Watts.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricPV">0</div>
+                    <div class="metric-unit">W</div>
+                    <div class="metric-change" id="pvChange" style="display: none;"></div>
+                </div>
+
+                <div class="metric-card battery" data-metric-group="basic">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">🔋</div>
+                            <div class="metric-label">Battery SOC</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="State of Charge - percentage of battery capacity currently available (0-100%).">i</span>
+                    </div>
+                    <div class="metric-value" id="metricBattery">0</div>
+                    <div class="metric-unit">%</div>
+                    <div class="metric-change" id="batteryChange" style="display: none;"></div>
+                </div>
+
+                <div class="metric-card load" data-metric-group="basic">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">⚙️</div>
+                            <div class="metric-label">System Load</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Current power consumption by your home/facility in Watts.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricLoad">0</div>
+                    <div class="metric-unit">W</div>
+                    <div class="metric-change" id="loadChange" style="display: none;"></div>
+                </div>
+
+                <div class="metric-card grid" data-metric-group="basic">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">🔌</div>
+                            <div class="metric-label">Grid Import/Export</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Power flowing to (+) or from (-) the grid. Positive = consuming, Negative = exporting.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricGrid">0</div>
+                    <div class="metric-unit">W</div>
+                    <div class="metric-change" id="gridChange" style="display: none;"></div>
+                </div>
+
+                <!-- Advanced Metrics Group -->
+                <div class="metric-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 100%);" data-metric-group="advanced">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">📈</div>
+                            <div class="metric-label">Energy Efficiency</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="% of generated solar energy being used (vs. wasted). Higher = better system optimization. Calculated as: (Load - Grid Purchase) / PV Generation × 100%">i</span>
+                    </div>
+                    <div class="metric-value" id="metricEfficiency">0</div>
+                    <div class="metric-unit">%</div>
+                </div>
+
+                <div class="metric-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.02) 100%);" data-metric-group="advanced">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">🎯</div>
+                            <div class="metric-label">Grid Independence</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="% of your energy needs met by solar + battery (not from grid). 100% = completely off-grid.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricIndependence">0</div>
+                    <div class="metric-unit">%</div>
+                </div>
+
+                <div class="metric-card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);" data-metric-group="advanced">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">💰</div>
+                            <div class="metric-label">Daily Savings</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Estimated cost saved today. Calculated from solar energy generated minus grid purchases, times average electricity rate.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricSavings">$0</div>
+                    <div class="metric-unit">PHP/day</div>
+                </div>
+
+                <div class="metric-card" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(139, 92, 246, 0.02) 100%);" data-metric-group="advanced">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">🌍</div>
+                            <div class="metric-label">CO₂ Offset</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Equivalent CO₂ not emitted thanks to your solar generation. 1 kWh solar ≈ 0.4 kg CO₂ avoided.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricCO2">0</div>
+                    <div class="metric-unit">kg/day</div>
+                </div>
+
+                <div class="metric-card" style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.05) 0%, rgba(244, 63, 94, 0.02) 100%);" data-metric-group="advanced">
+                    <div class="metric-header">
+                        <div>
+                            <div class="metric-icon">🔄</div>
+                            <div class="metric-label">Battery Health</div>
+                        </div>
+                        <span class="info-icon" data-tooltip="Estimated battery cycle count and health status. Indicates battery degradation over time.">i</span>
+                    </div>
+                    <div class="metric-value" id="metricBatteryHealth">Good</div>
+                    <div class="metric-unit" id="batteryHealthPercent">95%</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction Calculator -->
+        <section class="section" id="calculatorSection" style="display: none;">
+            <h2 class="section-title">
+                System Projections & ROI Calculator
+                <span class="info-icon" data-tooltip="Use historical data to estimate future savings and payback period for your solar investment.">i</span>
+            </h2>
+            <div class="calculator-section">
+                <div class="calculator-grid">
+                    <div class="input-group">
+                        <label>
+                            System Cost ($)
+                            <span class="info-icon" data-tooltip="Total installation cost of your solar + battery system">i</span>
+                        </label>
+                        <input type="number" id="systemCost" placeholder="0" value="10000">
+                    </div>
+                    <div class="input-group">
+                        <label>
+                            Electricity Rate ($/kWh)
+                            <span class="info-icon" data-tooltip="Average local electricity cost per kilowatt-hour">i</span>
+                        </label>
+                        <input type="number" id="electricityRate" placeholder="0.12" value="0.12" step="0.01">
+                    </div>
+                    <div class="input-group">
+                        <label>
+                            Feed-in Rate ($/kWh)
+                            <span class="info-icon" data-tooltip="Rate received for exporting excess solar to the grid (if applicable)">i</span>
+                        </label>
+                        <input type="number" id="feedInRate" placeholder="0.06" value="0.06" step="0.01">
+                    </div>
+                    <div class="input-group">
+                        <label>
+                            Annual Degradation (%)
+                            <span class="info-icon" data-tooltip="Typical solar panels degrade ~0.5% per year. Battery: ~2% per year.">i</span>
+                        </label>
+                        <input type="number" id="degradation" placeholder="0.5" value="0.5" step="0.1">
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="calculateBtn" style="width: 100%; margin-top: var(--spacing-md);">Calculate ROI & Projections</button>
+                <div class="calculator-results" id="calculatorResults" style="display: none;">
+                    <div class="result-item">
+                        <div class="result-label">Payback Period</div>
+                        <div class="result-value" id="paybackYears">0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">years</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">Annual Savings</div>
+                        <div class="result-value" id="annualSavings">$0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">USD/year</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">25-Year Value</div>
+                        <div class="result-value" id="lifetimeValue">$0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">USD</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">CO₂ Offset (25 yrs)</div>
+                        <div class="result-value" id="totalCO2">0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">tons</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Period Selector & Charts -->
+        <section class="section" id="chartsSection" style="display: none;">
+            <h2 class="section-title">Performance Data & Analytics</h2>
+
+            <div class="controls-bar">
+                <div class="period-selector" id="periodSelector">
+                    <button class="period-btn active" data-period="daily">Daily Report</button>
+                    <button class="period-btn" data-period="weekly">Weekly Report</button>
+                </div>
+                <div class="export-selector">
+                    <button class="btn btn-secondary btn-sm" id="exportDashboard" title="Export entire dashboard as PNG">📥 Dashboard</button>
+                    <button class="btn btn-secondary btn-sm" id="exportHTML" title="Export dashboard as standalone HTML">📄 HTML</button>
+                    <button class="btn btn-secondary btn-sm" id="exportCSV" title="Download data as CSV">📊 CSV</button>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <div class="chart-title">PV Generation Timeline</div>
+                        <div class="chart-actions">
+                            <button class="btn btn-icon btn-secondary btn-sm" id="downloadPVChart" title="Download this chart">⬇️</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="pvChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <div class="chart-title">Battery State of Charge</div>
+                        <div class="chart-actions">
+                            <button class="btn btn-icon btn-secondary btn-sm" id="downloadSOCChart" title="Download this chart">⬇️</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="socChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <div class="chart-title">Energy Flow Analysis</div>
+                        <div class="chart-actions">
+                            <button class="btn btn-icon btn-secondary btn-sm" id="downloadEnergyChart" title="Download this chart">⬇️</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="energyChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <div class="chart-title">System Load Demand</div>
+                        <div class="chart-actions">
+                            <button class="btn btn-icon btn-secondary btn-sm" id="downloadLoadChart" title="Download this chart">⬇️</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="loadChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Table -->
+        <section class="section" id="tableSection" style="display: none;">
+            <h2 class="section-title">Detailed Data</h2>
+            <div class="table-container">
+                <div class="table-wrapper">
+                    <table id="dataTable">
+                        <thead>
+                            <tr id="tableHeader"></tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights and ROI analysis</p>
+    </footer>
+
+    <script>
+        let currentData = null;
+        let currentPeriod = 'daily';
+        let charts = {};
+        let calculatorData = {};
+
+        const CONFIG = {
+            CO2_PER_KWH: 0.4,
+            BATTERY_CYCLES_THRESHOLD: 5000,
+            BATTERY_EFFICIENCY: 0.95,
+            INVERTER_EFFICIENCY: 0.98
+        };
+
+        const uploadArea = document.getElementById('uploadArea');
+        const csvFile = document.getElementById('csvFile');
+        const selectFileBtn = document.getElementById('selectFileBtn');
+
+        selectFileBtn.addEventListener('click', () => csvFile.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.opacity = '0.7';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.opacity = '1';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.opacity = '1';
+            if (e.dataTransfer.files.length) {
+                csvFile.files = e.dataTransfer.files;
+                processFile();
+            }
+        });
+
+        csvFile.addEventListener('change', processFile);
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message show ${type}`;
+            setTimeout(() => statusEl.classList.remove('show'), 5000);
+        }
+
+        function processFile() {
+            const file = csvFile.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    if (!results.data || results.data.length === 0) {
+                        showStatus('No data found in CSV', 'error');
+                        return;
+                    }
+
+                    const headers = Object.keys(results.data[0]);
+                    const isWeekly = headers.includes('Battery charge(kWh)');
+
+                    currentData = {
+                        type: isWeekly ? 'weekly' : 'daily',
+                        raw: results.data,
+                        fileName: file.name,
+                        headers: headers
+                    };
+
+                    initializeDashboard();
+                    showStatus(`✓ ${file.name} loaded successfully`, 'success');
+                },
+                error: (error) => {
+                    showStatus('Error parsing CSV: ' + error.message, 'error');
+                }
+            });
+        }
+
+        function initializeDashboard() {
+            document.getElementById('energyFlowSection').style.display = 'block';
+            document.getElementById('metricsSection').style.display = 'block';
+            document.getElementById('chartsSection').style.display = 'block';
+            document.getElementById('calculatorSection').style.display = 'block';
+            document.getElementById('tableSection').style.display = 'block';
+
+            setupToggleControls();
+            updateMetrics();
+            renderCharts();
+            renderTable();
+            setupPeriodSelector();
+            setupExportButtons();
+            setupCalculator();
+        }
+
+        function setupToggleControls() {
+            const toggles = document.querySelectorAll('[data-group]');
+            toggles.forEach(toggle => {
+                toggle.addEventListener('change', () => {
+                    const group = toggle.dataset.group;
+                    const cards = document.querySelectorAll(`[data-metric-group="${group}"]`);
+                    cards.forEach(card => {
+                        card.style.display = toggle.checked ? 'block' : 'none';
+                    });
+                });
+            });
+        }
+
+        function updateMetrics() {
+            const data = currentData.raw;
+            if (!data || data.length === 0) return;
+
+            let lastRow, firstRow;
+
+            if (currentData.type === 'daily') {
+                lastRow = data[data.length - 1];
+                firstRow = data[0];
+            } else {
+                lastRow = data[data.length - 1];
+                firstRow = data[0];
+            }
+
+            const pv = parseFloat(lastRow['PV(W)'] || lastRow['PV(kWh)'] || 0) || 0;
+            const soc = parseFloat(lastRow['Battery SOC(%)'] || 0) || 0;
+            const load = parseFloat(lastRow['Load(W)'] || lastRow['Load(kWh)'] || 0) || 0;
+            const grid = parseFloat(lastRow['Grid(W)'] || lastRow['Energy purchase(kWh)'] || 0) || 0;
+            const battery = parseFloat(lastRow['Battery(W)'] || 0) || 0;
+
+            document.getElementById('metricPV').textContent = Math.round(pv).toLocaleString();
+            document.getElementById('metricBattery').textContent = Math.round(soc);
+            document.getElementById('metricLoad').textContent = Math.round(load).toLocaleString();
+            document.getElementById('metricGrid').textContent = Math.round(grid).toLocaleString();
+
+            document.getElementById('flowPV').textContent = Math.round(pv) + ' W';
+            document.getElementById('flowBattery').textContent = Math.round(soc) + '%';
+            document.getElementById('flowLoad').textContent = Math.round(load) + ' W';
+            document.getElementById('flowGrid').textContent = Math.round(grid) + ' W';
+
+            const efficiency = (load > 0) ? Math.min(100, ((load - grid) / (pv || 1)) * 100) : 0;
+            const independence = Math.max(0, Math.min(100, ((load - grid) / (load || 1)) * 100));
+
+            document.getElementById('metricEfficiency').textContent = Math.round(efficiency);
+            document.getElementById('metricIndependence').textContent = Math.round(independence);
+
+            const dailySavings = ((pv - grid) * (parseFloat(document.getElementById('electricityRate').value) || 0.12));
+            document.getElementById('metricSavings').textContent = '₱' + Math.max(0, dailySavings.toFixed(2));
+
+            const dailyCO2 = (pv / 1000) * CONFIG.CO2_PER_KWH;
+            document.getElementById('metricCO2').textContent = Math.max(0, dailyCO2.toFixed(2));
+
+            const batteryHealth = Math.min(100, 100 - (Math.abs(battery) * 0.0001));
+            document.getElementById('metricBatteryHealth').textContent = batteryHealth > 80 ? 'Good' : batteryHealth > 60 ? 'Fair' : 'Poor';
+            document.getElementById('batteryHealthPercent').textContent = Math.round(batteryHealth) + '%';
+
+            if (data.length > 1) {
+                const pvChange = pv - (parseFloat(firstRow['PV(W)'] || firstRow['PV(kWh)'] || 0) || 0);
+                const socChange = soc - (parseFloat(firstRow['Battery SOC(%)'] || 0) || 0);
+                const loadChange = load - (parseFloat(firstRow['Load(W)'] || firstRow['Load(kWh)'] || 0) || 0);
+
+                updateChangeIndicator('pvChange', pvChange, pv);
+                updateChangeIndicator('batteryChange', socChange, soc);
+                updateChangeIndicator('loadChange', loadChange, load);
+            }
+
+            calculatorData.avgDailySavings = dailySavings;
+        }
+
+        function updateChangeIndicator(elementId, change, current) {
+            const el = document.getElementById(elementId);
+            if (Math.abs(change) > 0.1) {
+                const arrow = change > 0 ? '↑' : '↓';
+                const absChange = Math.abs(change).toFixed(1);
+                el.textContent = `${arrow} ${absChange}`;
+                el.style.display = 'inline-block';
+            }
+        }
+
+        function renderCharts() {
+            const data = currentData.raw;
+            if (!data) return;
+
+            if (currentData.type === 'daily') {
+                renderDailyCharts(data);
+            } else {
+                renderWeeklyCharts(data);
+            }
+        }
+
+        function renderDailyCharts(data) {
+            const times = data.map(d => {
+                const date = new Date(d.Time);
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            });
+
+            const pv = data.map(d => parseFloat(d['PV(W)']) || 0);
+            const soc = data.map(d => parseFloat(d['Battery SOC(%)']) || 0);
+            const load = data.map(d => parseFloat(d['Load(W)']) || 0);
+            const grid = data.map(d => parseFloat(d['Grid(W)']) || 0);
+            const battery = data.map(d => parseFloat(d['Battery(W)']) || 0);
+
+            Object.values(charts).forEach(chart => chart?.destroy?.());
+            charts = {};
+
+            const pvCtx = document.getElementById('pvChart').getContext('2d');
+            charts.pv = new Chart(pvCtx, {
+                type: 'line',
+                data: {
+                    labels: times,
+                    datasets: [{
+                        label: 'Solar Generation (W)',
+                        data: pv,
+                        borderColor: '#F59E0B',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointBackgroundColor: '#F59E0B'
+                    }]
+                },
+                options: chartOptions()
+            });
+
+            const socCtx = document.getElementById('socChart').getContext('2d');
+            charts.soc = new Chart(socCtx, {
+                type: 'line',
+                data: {
+                    labels: times,
+                    datasets: [{
+                        label: 'Battery SOC (%)',
+                        data: soc,
+                        borderColor: '#10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointBackgroundColor: '#10B981'
+                    }]
+                },
+                options: chartOptions()
+            });
+
+            const energyCtx = document.getElementById('energyChart').getContext('2d');
+            charts.energy = new Chart(energyCtx, {
+                type: 'bar',
+                data: {
+                    labels: times.slice(0, 24),
+                    datasets: [
+                        {
+                            label: 'Solar (W)',
+                            data: pv.slice(0, 24),
+                            backgroundColor: '#F59E0B'
+                        },
+                        {
+                            label: 'Battery (W)',
+                            data: battery.slice(0, 24),
+                            backgroundColor: '#10B981'
+                        },
+                        {
+                            label: 'Grid (W)',
+                            data: grid.slice(0, 24),
+                            backgroundColor: '#8B5CF6'
+                        }
+                    ]
+                },
+                options: {
+                    ...chartOptions(),
+                    scales: {
+                        x: {
+                            stacked: false
+                        },
+                        y: {
+                            stacked: false,
+                            ticks: { color: '#CBD5E1' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        }
+                    }
+                }
+            });
+
+            const loadCtx = document.getElementById('loadChart').getContext('2d');
+            charts.load = new Chart(loadCtx, {
+                type: 'area',
+                data: {
+                    labels: times,
+                    datasets: [{
+                        label: 'System Load (W)',
+                        data: load,
+                        borderColor: '#6366F1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 1,
+                        pointBackgroundColor: '#6366F1'
+                    }]
+                },
+                options: chartOptions()
+            });
+        }
+
+        function renderWeeklyCharts(data) {
+            const dates = data.map(d => d.Time);
+
+            const pv = data.map(d => parseFloat(d['PV(kWh)']) || 0);
+            const purchase = data.map(d => parseFloat(d['Energy purchase(kWh)']) || 0);
+            const feedIn = data.map(d => parseFloat(d['Feed-in(kWh)']) || 0);
+            const charge = data.map(d => parseFloat(d['Battery charge(kWh)']) || 0);
+            const discharge = data.map(d => parseFloat(d['Battery discharge(kWh)']) || 0);
+            const load = data.map(d => parseFloat(d['Load(kWh)']) || 0);
+
+            Object.values(charts).forEach(chart => chart?.destroy?.());
+            charts = {};
+
+            const pvCtx = document.getElementById('pvChart').getContext('2d');
+            charts.pv = new Chart(pvCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'PV Generation (kWh)',
+                        data: pv,
+                        backgroundColor: '#F59E0B'
+                    }]
+                },
+                options: chartOptions()
+            });
+
+            const socCtx = document.getElementById('socChart').getContext('2d');
+            charts.soc = new Chart(socCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: 'Battery Charge (kWh)',
+                            data: charge,
+                            backgroundColor: '#10B981'
+                        },
+                        {
+                            label: 'Battery Discharge (kWh)',
+                            data: discharge,
+                            backgroundColor: '#EF4444'
+                        }
+                    ]
+                },
+                options: chartOptions()
+            });
+
+            const energyCtx = document.getElementById('energyChart').getContext('2d');
+            charts.energy = new Chart(energyCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: 'Grid Purchase (kWh)',
+                            data: purchase,
+                            backgroundColor: '#8B5CF6'
+                        },
+                        {
+                            label: 'Feed-in (kWh)',
+                            data: feedIn,
+                            backgroundColor: '#F59E0B'
+                        }
+                    ]
+                },
+                options: chartOptions()
+            });
+
+            const loadCtx = document.getElementById('loadChart').getContext('2d');
+            charts.load = new Chart(loadCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Total Load (kWh)',
+                        data: load,
+                        backgroundColor: '#6366F1'
+                    }]
+                },
+                options: chartOptions()
+            });
+        }
+
+        function chartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#CBD5E1' }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#94A3B8', maxTicksLimit: 8 },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                    },
+                    y: {
+                        ticks: { color: '#CBD5E1' },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                    }
+                }
+            };
+        }
+
+        function renderTable() {
+            const data = currentData.raw;
+            if (!data) return;
+
+            document.getElementById('tableBody').innerHTML = '';
+
+            const headers = Object.keys(data[0]);
+            document.getElementById('tableHeader').innerHTML = headers
+                .map(h => `<th>${h}</th>`)
+                .join('');
+
+            const rowsToShow = data.slice(-20).reverse();
+            rowsToShow.forEach(row => {
+                const cells = headers.map(h => {
+                    const value = row[h];
+                    const num = parseFloat(value);
+                    return `<td>${isNaN(num) ? value : num.toFixed(2)}</td>`;
+                });
+                document.getElementById('tableBody').innerHTML += `<tr>${cells.join('')}</tr>`;
+            });
+        }
+
+        function setupPeriodSelector() {
+            const buttons = document.querySelectorAll('.period-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    buttons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentPeriod = btn.dataset.period;
+                    renderCharts();
+                    renderTable();
+                });
+            });
+
+            if (currentData.type === 'weekly') {
+                document.getElementById('periodSelector').style.display = 'none';
+            }
+        }
+
+        function setupExportButtons() {
+            document.getElementById('exportDashboard').addEventListener('click', exportDashboard);
+            document.getElementById('exportHTML').addEventListener('click', exportHTML);
+            document.getElementById('exportCSV').addEventListener('click', exportCSV);
+
+            document.getElementById('downloadPVChart').addEventListener('click', () => downloadChart('pvChart', 'pv-generation'));
+            document.getElementById('downloadSOCChart').addEventListener('click', () => downloadChart('socChart', 'battery-soc'));
+            document.getElementById('downloadEnergyChart').addEventListener('click', () => downloadChart('energyChart', 'energy-flow'));
+            document.getElementById('downloadLoadChart').addEventListener('click', () => downloadChart('loadChart', 'system-load'));
+        }
+
+        async function exportDashboard() {
+            const btn = document.getElementById('exportDashboard');
+            btn.disabled = true;
+            btn.textContent = '⏳ Generating...';
+
+            try {
+                const canvas = await html2canvas(document.querySelector('.container'), {
+                    backgroundColor: '#0F1419',
+                    allowTaint: true,
+                    useCORS: true,
+                    scale: 2
+                });
+
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `solar-dashboard-${new Date().toISOString().split('T')[0]}.png`;
+                link.click();
+                showStatus('✓ Dashboard exported as PNG', 'success');
+            } catch (error) {
+                showStatus('Error exporting dashboard: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📥 Dashboard';
+            }
+        }
+
+        function exportHTML() {
+            const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+        <meta charset="UTF-8">
+        <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
+        <link rel="stylesheet" href="style.css">
+</head>
+<body>
+        <div class="container">
+            <h1>Solar Analytics Report</h1>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+            ${document.querySelector('.container').innerHTML}
+        </div>
+</body>
+</html>`;
+
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `solar-report-${new Date().toISOString().split('T')[0]}.html`;
+            link.click();
+            showStatus('✓ Report exported as HTML', 'success');
+        }
+
+        function exportCSV() {
+            let csv = currentData.headers.join(',') + '\n';
+            currentData.raw.forEach(row => {
+                csv += currentData.headers.map(h => row[h]).join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `solar-data-${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            showStatus('✓ Data exported as CSV', 'success');
+        }
+
+        async function downloadChart(chartId, name) {
+            try {
+                const canvas = document.getElementById(chartId);
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `${name}-${new Date().toISOString().split('T')[0]}.png`;
+                link.click();
+                showStatus('✓ Chart exported', 'success');
+            } catch (error) {
+                showStatus('Error exporting chart', 'error');
+            }
+        }
+
+        function setupCalculator() {
+            document.getElementById('calculateBtn').addEventListener('click', calculateROI);
+        }
+
+        function calculateROI() {
+            const systemCost = parseFloat(document.getElementById('systemCost').value) || 0;
+            const electricityRate = parseFloat(document.getElementById('electricityRate').value) || 0.12;
+            const feedInRate = parseFloat(document.getElementById('feedInRate').value) || 0.06;
+            const degradation = parseFloat(document.getElementById('degradation').value) || 0.5;
+
+            if (systemCost <= 0) {
+                showStatus('Please enter system cost', 'error');
+                return;
+            }
+
+            let dailySavings = calculatorData.avgDailySavings || 5;
+            let annualSavings = dailySavings * 365;
+            let paybackYears = systemCost / annualSavings;
+
+            let lifetimeValue = 0;
+            let currentAnnualSavings = annualSavings;
+            for (let year = 0; year < 25; year++) {
+                lifetimeValue += currentAnnualSavings;
+                currentAnnualSavings *= (1 - (degradation / 100));
+            }
+
+            const avgDailyPV = 4;
+            const totalCO2 = (avgDailyPV * 365 * 25 * CONFIG.CO2_PER_KWH / 1000).toFixed(1);
+
+            document.getElementById('paybackYears').textContent = paybackYears.toFixed(1);
+            document.getElementById('annualSavings').textContent = '$' + annualSavings.toFixed(0);
+            document.getElementById('lifetimeValue').textContent = '$' + lifetimeValue.toFixed(0);
+            document.getElementById('totalCO2').textContent = totalCO2;
+            document.getElementById('calculatorResults').style.display = 'grid';
+
+            showStatus('✓ ROI calculations updated', 'success');
+        }
+    </script>
+</body>
+</html>
