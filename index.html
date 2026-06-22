@@ -209,6 +209,11 @@
                     <div class="metric-value" id="metricBatteryHealth">Good</div>
                     <div class="metric-unit" id="batteryHealthPercent">95%</div>
                 </div>
+
+                <div style="grid-column: 1 / -1; margin-top: var(--spacing-md);">
+                    <button class="btn btn-primary" id="batteryOptBtn" style="width: 100%;">🔋 Battery Optimization Analysis</button>
+                    <div id="batteryOptResults" style="display: none; margin-top: var(--spacing-md); padding: var(--spacing-md); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md); border-left: 3px solid #10B981; font-family: monospace; font-size: 12px; color: #CBD5E1; white-space: pre-wrap; overflow-x: auto;"></div>
+                </div>
             </div>
         </section>
 
@@ -250,7 +255,7 @@
                     </div>
                 </div>
                 <button class="btn btn-primary" id="calculateBtn" style="width: 100%; margin-top: var(--spacing-md);">Calculate ROI & Projections</button>
-                <div class="calculator-results" id="calculatorResults" style="display: none;">
+                <div class="calculator-results" id="calculatorResults" style="display: none; margin-top: var(--spacing-md);">
                     <div class="result-item">
                         <div class="result-label">Payback Period</div>
                         <div class="result-value" id="paybackYears">0</div>
@@ -282,12 +287,32 @@
             <div class="controls-bar">
                 <div class="period-selector" id="periodSelector">
                     <button class="period-btn active" data-period="daily">Daily Report</button>
-                    <button class="period-btn" data-period="weekly">Weekly Report</button>
+                    <button class="period-btn" data-period="weekly">Weekly Report (Predictive)</button>
                 </div>
                 <div class="export-selector">
                     <button class="btn btn-secondary btn-sm" id="exportDashboard" title="Export entire dashboard as PNG">📥 Dashboard</button>
                     <button class="btn btn-secondary btn-sm" id="exportHTML" title="Export dashboard as standalone HTML">📄 HTML</button>
                     <button class="btn btn-secondary btn-sm" id="exportCSV" title="Download data as CSV">📊 CSV</button>
+                </div>
+            </div>
+
+            <div id="weatherIndicator" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 6px; font-size: 12px; color: #F59E0B; border-left: 3px solid #F59E0B;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <span>📊 Weekly forecast using <span id="weatherSource">real weather</span> data</span>
+                    <select id="weatherSourceSelect" class="unit-select" style="font-size: 11px; padding: 4px 6px;">
+                        <option value="auto">Auto-select</option>
+                        <option value="openmeteo">Open-Meteo</option>
+                        <option value="weatherapi">WeatherAPI.com</option>
+                        <option value="weatherbit">WeatherBit</option>
+                        <option value="wttr">wttr.in</option>
+                        <option value="openweathermap">OpenWeatherMap</option>
+                        <option value="tomorrow">Tomorrow.io</option>
+                        <option value="climacell">ClimaCell</option>
+                        <option value="weathergov">Weather.gov</option>
+                        <option value="visualcrossing">Visual Crossing</option>
+                        <option value="mock">Mock Data</option>
+                    </select>
+                    <button id="retryWeatherBtn" class="btn btn-sm btn-secondary" style="margin: 0; padding: 4px 8px; font-size: 11px;">🔄 Retry</button>
                 </div>
             </div>
 
@@ -363,22 +388,36 @@
         <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights and ROI analysis</p>
     </footer>
 
+    <!-- New JS modules (in order) -->
+    <script src="js/data-processor.js"></script>
+    <script src="js/weather-predictor.js"></script>
+    <script src="js/ui-manager.js"></script>
+    <script src="js/tooltip.js"></script>
+
     <script>
         let currentData = null;
         let currentPeriod = 'daily';
         let charts = {};
         let calculatorData = {};
+        let weeklyForecastData = null;
+        let batteryOptimization = null;
 
         const CONFIG = {
             CO2_PER_KWH: 0.4,
             BATTERY_CYCLES_THRESHOLD: 5000,
             BATTERY_EFFICIENCY: 0.95,
-            INVERTER_EFFICIENCY: 0.98
+            INVERTER_EFFICIENCY: 0.98,
+            PHP_TO_USD: 0.018, // Approximate conversion rate
+            ELECTRICITY_RATE_PHP: 11.50, // Average PHP per kWh
+            FEED_IN_RATE_PHP: 5.75 // Average PHP per kWh for feed-in
         };
 
         const uploadArea = document.getElementById('uploadArea');
         const csvFile = document.getElementById('csvFile');
         const selectFileBtn = document.getElementById('selectFileBtn');
+
+        // Initialize UI manager
+        UIManager.init();
 
         selectFileBtn.addEventListener('click', () => csvFile.click());
 
@@ -416,32 +455,91 @@
             Papa.parse(file, {
                 header: true,
                 skipEmptyLines: true,
-                complete: (results) => {
+                complete: async (results) => {
                     if (!results.data || results.data.length === 0) {
                         showStatus('No data found in CSV', 'error');
                         return;
                     }
 
-                    const headers = Object.keys(results.data[0]);
-                    const isWeekly = headers.includes('Battery charge(kWh)');
+                    try {
+                        const headers = Object.keys(results.data[0]);
+                        console.log('CSV Headers:', headers); // DEBUG
+                        const processed = DataProcessor.processFile(results.data, headers);
 
-                    currentData = {
-                        type: isWeekly ? 'weekly' : 'daily',
-                        raw: results.data,
-                        fileName: file.name,
-                        headers: headers
-                    };
+                        currentData = {
+                            type: processed.format,
+                            raw: processed.data,
+                            fileName: file.name,
+                            headers: headers,
+                            normalized: processed.data
+                        };
 
-                    initializeDashboard();
-                    showStatus(`✓ ${file.name} loaded successfully`, 'success');
+                        console.log('Processed Data:', currentData); // DEBUG
+
+                        // Get weather forecast
+                        const units = UIManager.getUnitSettings();
+                        const selectedSource = document.getElementById('weatherSourceSelect')?.value || 'auto';
+                        const weatherResult = await WeatherPredictor.getWeatherForecast(14.5995, 120.9842, selectedSource);
+                        UIManager.setWeatherData(weatherResult);
+
+                        // Generate weekly forecast if daily data
+                        if (processed.format === 'daily') {
+                            weeklyForecastData = DataProcessor.generateWeeklyForecast(
+                                processed.data,
+                                weatherResult.forecast
+                            );
+                            console.log('Weekly Forecast Data:', weeklyForecastData); // DEBUG
+                            showWeatherIndicator(weatherResult.source);
+                            
+                            // Generate battery optimization
+                            batteryOptimization = BatteryOptimizer.analyze(processed.data, weatherResult.forecast);
+                            console.log('Battery Optimization:', batteryOptimization); // DEBUG
+                        }
+
+                        UIManager.setCurrentData(currentData);
+                        UIManager.showUploadReset(file.name);
+                        initializeDashboard();
+                        showStatus(`✓ ${file.name} loaded successfully`, 'success');
+                    } catch (error) {
+                        console.error('Error:', error); // DEBUG
+                        showStatus('Error processing file: ' + error.message, 'error');
+                    }
                 },
                 error: (error) => {
+                    console.error('Parse Error:', error); // DEBUG
                     showStatus('Error parsing CSV: ' + error.message, 'error');
                 }
             });
         }
 
+        function showWeatherIndicator(source) {
+            const indicator = document.getElementById('weatherIndicator');
+            const sourceEl = document.getElementById('weatherSource');
+            indicator.style.display = 'block';
+            sourceEl.textContent = source === 'mock' ? 'mock' : source;
+        }
+
+        function retryWeather() {
+            showStatus('⏳ Fetching weather data...', 'success');
+            const selectedSource = document.getElementById('weatherSourceSelect')?.value || 'auto';
+            WeatherPredictor.getWeatherForecast(14.5995, 120.9842, selectedSource).then(result => {
+                UIManager.setWeatherData(result);
+                if (currentData && currentData.type === 'daily') {
+                    weeklyForecastData = DataProcessor.generateWeeklyForecast(
+                        currentData.normalized,
+                        result.forecast
+                    );
+                    showWeatherIndicator(result.source);
+                    renderCharts();
+                    showStatus('✓ Weather data refreshed from ' + result.source, 'success');
+                }
+            }).catch(err => {
+                showStatus('Error fetching weather: ' + err.message, 'error');
+            });
+        }
+
         function initializeDashboard() {
+            console.log('Initializing Dashboard'); // DEBUG
             document.getElementById('energyFlowSection').style.display = 'block';
             document.getElementById('metricsSection').style.display = 'block';
             document.getElementById('chartsSection').style.display = 'block';
@@ -455,6 +553,16 @@
             setupPeriodSelector();
             setupExportButtons();
             setupCalculator();
+            setupWeatherRetry();
+            setupBatteryOptimizer();
+        }
+
+        function setupWeatherRetry() {
+            const retryBtn = document.getElementById('retryWeatherBtn');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', retryWeather);
+                console.log('Weather retry button setup'); // DEBUG
+            }
         }
 
         function setupToggleControls() {
@@ -470,35 +578,49 @@
             });
         }
 
+        function formatMetricValue(value, unit) {
+            const units = UIManager.getUnitSettings();
+            let converted = value;
+
+            if (unit === 'power') {
+                converted = UIManager.convertUnit(value, 'W', units.energy);
+            } else if (unit === 'energy') {
+                converted = UIManager.convertUnit(value, 'Wh', units.dailyEnergy);
+            } else if (unit === 'emission') {
+                converted = UIManager.convertUnit(value, 'kg', units.emission);
+            }
+
+            return converted.toLocaleString(undefined, { maximumFractionDigits: 1 });
+        }
+
         function updateMetrics() {
-            const data = currentData.raw;
+            const data = currentData.normalized;
             if (!data || data.length === 0) return;
 
             let lastRow, firstRow;
+            lastRow = data[data.length - 1];
+            firstRow = data[0];
 
-            if (currentData.type === 'daily') {
-                lastRow = data[data.length - 1];
-                firstRow = data[0];
-            } else {
-                lastRow = data[data.length - 1];
-                firstRow = data[0];
-            }
+            const pv = lastRow.pv || 0;
+            const soc = lastRow.soc || 0;
+            const load = lastRow.load || 0;
+            const grid = lastRow.grid || 0;
+            const battery = lastRow.battery || 0;
 
-            const pv = parseFloat(lastRow['PV(W)'] || lastRow['PV(kWh)'] || 0) || 0;
-            const soc = parseFloat(lastRow['Battery SOC(%)'] || 0) || 0;
-            const load = parseFloat(lastRow['Load(W)'] || lastRow['Load(kWh)'] || 0) || 0;
-            const grid = parseFloat(lastRow['Grid(W)'] || lastRow['Energy purchase(kWh)'] || 0) || 0;
-            const battery = parseFloat(lastRow['Battery(W)'] || 0) || 0;
+            const units = UIManager.getUnitSettings();
+            const pvDisplay = formatMetricValue(pv, 'power');
+            const loadDisplay = formatMetricValue(load, 'power');
+            const gridDisplay = formatMetricValue(grid, 'power');
 
-            document.getElementById('metricPV').textContent = Math.round(pv).toLocaleString();
+            document.getElementById('metricPV').textContent = pvDisplay;
             document.getElementById('metricBattery').textContent = Math.round(soc);
-            document.getElementById('metricLoad').textContent = Math.round(load).toLocaleString();
-            document.getElementById('metricGrid').textContent = Math.round(grid).toLocaleString();
+            document.getElementById('metricLoad').textContent = loadDisplay;
+            document.getElementById('metricGrid').textContent = gridDisplay;
 
-            document.getElementById('flowPV').textContent = Math.round(pv) + ' W';
+            document.getElementById('flowPV').textContent = pvDisplay + ' ' + units.energy;
             document.getElementById('flowBattery').textContent = Math.round(soc) + '%';
-            document.getElementById('flowLoad').textContent = Math.round(load) + ' W';
-            document.getElementById('flowGrid').textContent = Math.round(grid) + ' W';
+            document.getElementById('flowLoad').textContent = loadDisplay + ' ' + units.energy;
+            document.getElementById('flowGrid').textContent = gridDisplay + ' ' + units.energy;
 
             const efficiency = (load > 0) ? Math.min(100, ((load - grid) / (pv || 1)) * 100) : 0;
             const independence = Math.max(0, Math.min(100, ((load - grid) / (load || 1)) * 100));
@@ -506,20 +628,21 @@
             document.getElementById('metricEfficiency').textContent = Math.round(efficiency);
             document.getElementById('metricIndependence').textContent = Math.round(independence);
 
-            const dailySavings = ((pv - grid) * (parseFloat(document.getElementById('electricityRate').value) || 0.12));
+            const dailySavings = ((pv - grid) * (parseFloat(document.getElementById('electricityRate').value) || CONFIG.ELECTRICITY_RATE_PHP));
             document.getElementById('metricSavings').textContent = '₱' + Math.max(0, dailySavings.toFixed(2));
 
             const dailyCO2 = (pv / 1000) * CONFIG.CO2_PER_KWH;
-            document.getElementById('metricCO2').textContent = Math.max(0, dailyCO2.toFixed(2));
+            const co2Converted = formatMetricValue(dailyCO2, 'emission');
+            document.getElementById('metricCO2').textContent = Math.max(0, co2Converted);
 
             const batteryHealth = Math.min(100, 100 - (Math.abs(battery) * 0.0001));
             document.getElementById('metricBatteryHealth').textContent = batteryHealth > 80 ? 'Good' : batteryHealth > 60 ? 'Fair' : 'Poor';
             document.getElementById('batteryHealthPercent').textContent = Math.round(batteryHealth) + '%';
 
             if (data.length > 1) {
-                const pvChange = pv - (parseFloat(firstRow['PV(W)'] || firstRow['PV(kWh)'] || 0) || 0);
-                const socChange = soc - (parseFloat(firstRow['Battery SOC(%)'] || 0) || 0);
-                const loadChange = load - (parseFloat(firstRow['Load(W)'] || firstRow['Load(kWh)'] || 0) || 0);
+                const pvChange = pv - (firstRow.pv || 0);
+                const socChange = soc - (firstRow.soc || 0);
+                const loadChange = load - (firstRow.load || 0);
 
                 updateChangeIndicator('pvChange', pvChange, pv);
                 updateChangeIndicator('batteryChange', socChange, soc);
@@ -540,30 +663,38 @@
         }
 
         function renderCharts() {
-            const data = currentData.raw;
-            if (!data) return;
+            console.log('Rendering Charts - Current Period:', currentPeriod); // DEBUG
+            if (!currentData) {
+                console.warn('No current data for charts'); // DEBUG
+                return;
+            }
 
-            if (currentData.type === 'daily') {
-                renderDailyCharts(data);
+            if (currentPeriod === 'daily' || currentData.type === 'daily') {
+                console.log('Rendering daily charts'); // DEBUG
+                renderDailyCharts(currentData.normalized);
             } else {
-                renderWeeklyCharts(data);
+                console.log('Rendering weekly charts with data:', weeklyForecastData); // DEBUG
+                renderWeeklyCharts(weeklyForecastData || []);
             }
         }
 
         function renderDailyCharts(data) {
             const times = data.map(d => {
-                const date = new Date(d.Time);
+                if (!d.time) return '';
+                const date = new Date(d.time);
                 return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
             });
 
-            const pv = data.map(d => parseFloat(d['PV(W)']) || 0);
-            const soc = data.map(d => parseFloat(d['Battery SOC(%)']) || 0);
-            const load = data.map(d => parseFloat(d['Load(W)']) || 0);
-            const grid = data.map(d => parseFloat(d['Grid(W)']) || 0);
-            const battery = data.map(d => parseFloat(d['Battery(W)']) || 0);
+            const pv = data.map(d => d.pv || 0);
+            const soc = data.map(d => d.soc || 0);
+            const load = data.map(d => d.load || 0);
+            const grid = data.map(d => d.grid || 0);
+            const battery = data.map(d => d.battery || 0);
 
             Object.values(charts).forEach(chart => chart?.destroy?.());
             charts = {};
+
+            const units = UIManager.getUnitSettings();
 
             const pvCtx = document.getElementById('pvChart').getContext('2d');
             charts.pv = new Chart(pvCtx, {
@@ -571,7 +702,7 @@
                 data: {
                     labels: times,
                     datasets: [{
-                        label: 'Solar Generation (W)',
+                        label: `Solar Generation (${units.energy})`,
                         data: pv,
                         borderColor: '#F59E0B',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -612,17 +743,17 @@
                     labels: times.slice(0, 24),
                     datasets: [
                         {
-                            label: 'Solar (W)',
+                            label: `Solar (${units.energy})`,
                             data: pv.slice(0, 24),
                             backgroundColor: '#F59E0B'
                         },
                         {
-                            label: 'Battery (W)',
+                            label: `Battery (${units.energy})`,
                             data: battery.slice(0, 24),
                             backgroundColor: '#10B981'
                         },
                         {
-                            label: 'Grid (W)',
+                            label: `Grid (${units.energy})`,
                             data: grid.slice(0, 24),
                             backgroundColor: '#8B5CF6'
                         }
@@ -649,7 +780,7 @@
                 data: {
                     labels: times,
                     datasets: [{
-                        label: 'System Load (W)',
+                        label: `System Load (${units.energy})`,
                         data: load,
                         borderColor: '#6366F1',
                         backgroundColor: 'rgba(99, 102, 241, 0.1)',
@@ -665,17 +796,23 @@
         }
 
         function renderWeeklyCharts(data) {
-            const dates = data.map(d => d.Time);
+            if (!data || data.length === 0) {
+                showStatus('No weekly forecast data available', 'error');
+                return;
+            }
 
-            const pv = data.map(d => parseFloat(d['PV(kWh)']) || 0);
-            const purchase = data.map(d => parseFloat(d['Energy purchase(kWh)']) || 0);
-            const feedIn = data.map(d => parseFloat(d['Feed-in(kWh)']) || 0);
-            const charge = data.map(d => parseFloat(d['Battery charge(kWh)']) || 0);
-            const discharge = data.map(d => parseFloat(d['Battery discharge(kWh)']) || 0);
-            const load = data.map(d => parseFloat(d['Load(kWh)']) || 0);
+            const dates = data.map(d => d.date || '');
+            const pv = data.map(d => d.pv || 0);
+            const purchase = data.map(d => d.purchase || 0);
+            const feedIn = data.map(d => d.feedIn || 0);
+            const charge = data.map(d => d.charge || 0);
+            const discharge = data.map(d => d.discharge || 0);
+            const load = data.map(d => d.load || 0);
 
             Object.values(charts).forEach(chart => chart?.destroy?.());
             charts = {};
+
+            const units = UIManager.getUnitSettings();
 
             const pvCtx = document.getElementById('pvChart').getContext('2d');
             charts.pv = new Chart(pvCtx, {
@@ -683,7 +820,7 @@
                 data: {
                     labels: dates,
                     datasets: [{
-                        label: 'PV Generation (kWh)',
+                        label: `PV Generation (${units.dailyEnergy})`,
                         data: pv,
                         backgroundColor: '#F59E0B'
                     }]
@@ -698,12 +835,12 @@
                     labels: dates,
                     datasets: [
                         {
-                            label: 'Battery Charge (kWh)',
+                            label: `Battery Charge (${units.dailyEnergy})`,
                             data: charge,
                             backgroundColor: '#10B981'
                         },
                         {
-                            label: 'Battery Discharge (kWh)',
+                            label: `Battery Discharge (${units.dailyEnergy})`,
                             data: discharge,
                             backgroundColor: '#EF4444'
                         }
@@ -719,12 +856,12 @@
                     labels: dates,
                     datasets: [
                         {
-                            label: 'Grid Purchase (kWh)',
+                            label: `Grid Purchase (${units.dailyEnergy})`,
                             data: purchase,
                             backgroundColor: '#8B5CF6'
                         },
                         {
-                            label: 'Feed-in (kWh)',
+                            label: `Feed-in (${units.dailyEnergy})`,
                             data: feedIn,
                             backgroundColor: '#F59E0B'
                         }
@@ -739,7 +876,7 @@
                 data: {
                     labels: dates,
                     datasets: [{
-                        label: 'Total Load (kWh)',
+                        label: `Total Load (${units.dailyEnergy})`,
                         data: load,
                         backgroundColor: '#6366F1'
                     }]
@@ -771,24 +908,29 @@
         }
 
         function renderTable() {
-            const data = currentData.raw;
+            const data = currentData.normalized;
             if (!data) return;
 
             document.getElementById('tableBody').innerHTML = '';
 
-            const headers = Object.keys(data[0]);
+            const headers = ['time', 'pv', 'grid', 'battery', 'load', 'soc'];
             document.getElementById('tableHeader').innerHTML = headers
-                .map(h => `<th>${h}</th>`)
+                .map(h => `<th>${h.toUpperCase()}</th>`)
                 .join('');
 
             const rowsToShow = data.slice(-20).reverse();
+            const units = UIManager.getUnitSettings();
+
             rowsToShow.forEach(row => {
-                const cells = headers.map(h => {
-                    const value = row[h];
-                    const num = parseFloat(value);
-                    return `<td>${isNaN(num) ? value : num.toFixed(2)}</td>`;
-                });
-                document.getElementById('tableBody').innerHTML += `<tr>${cells.join('')}</tr>`;
+                const cells = [
+                    row.time || '',
+                    formatMetricValue(row.pv, 'power'),
+                    formatMetricValue(row.grid, 'power'),
+                    formatMetricValue(row.battery, 'power'),
+                    formatMetricValue(row.load, 'power'),
+                    Math.round(row.soc) + '%'
+                ];
+                document.getElementById('tableBody').innerHTML += `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
             });
         }
 
@@ -796,16 +938,18 @@
             const buttons = document.querySelectorAll('.period-btn');
             buttons.forEach(btn => {
                 btn.addEventListener('click', () => {
+                    console.log('Period button clicked:', btn.dataset.period); // DEBUG
                     buttons.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
+                    btn.style.boxShadow = '0 0 12px rgba(245, 158, 11, 0.6)'; // Active glow
                     currentPeriod = btn.dataset.period;
                     renderCharts();
                     renderTable();
                 });
             });
 
-            if (currentData.type === 'weekly') {
-                document.getElementById('periodSelector').style.display = 'none';
+            if (currentData && currentData.type === 'daily') {
+                document.getElementById('periodSelector').style.display = 'flex';
             }
         }
 
@@ -853,11 +997,17 @@
             <meta charset="UTF-8">
             <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
             <link rel="stylesheet" href="style.css">
+            <style>
+                body { background: #0F1419; color: #E6EDF3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; }
+                .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+            </style>
 </head>
 <body>
             <div class="container">
                 <h1>Solar Analytics Report</h1>
-                <p>Generated: ${new Date().toLocaleString()}</p>
+                <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+                <p><strong>File:</strong> ${currentData.fileName}</p>
+                <hr style="border: 1px solid rgba(148, 163, 184, 0.2); margin: 20px 0;">
                 ${document.querySelector('.container').innerHTML}
             </div>
 </body>
@@ -872,9 +1022,9 @@
         }
 
         function exportCSV() {
-            let csv = currentData.headers.join(',') + '\n';
-            currentData.raw.forEach(row => {
-                csv += currentData.headers.map(h => row[h]).join(',') + '\n';
+            let csv = 'time,pv,grid,battery,load,soc\n';
+            currentData.normalized.forEach(row => {
+                csv += `${row.time},${row.pv},${row.grid},${row.battery},${row.load},${row.soc}\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv' });
@@ -904,8 +1054,8 @@
 
         function calculateROI() {
             const systemCost = parseFloat(document.getElementById('systemCost').value) || 0;
-            const electricityRate = parseFloat(document.getElementById('electricityRate').value) || 0.12;
-            const feedInRate = parseFloat(document.getElementById('feedInRate').value) || 0.06;
+            const electricityRate = parseFloat(document.getElementById('electricityRate').value) || CONFIG.ELECTRICITY_RATE_PHP;
+            const feedInRate = parseFloat(document.getElementById('feedInRate').value) || CONFIG.FEED_IN_RATE_PHP;
             const degradation = parseFloat(document.getElementById('degradation').value) || 0.5;
 
             if (systemCost <= 0) {
@@ -913,10 +1063,31 @@
                 return;
             }
 
-            let dailySavings = calculatorData.avgDailySavings || 5;
-            let annualSavings = dailySavings * 365;
-            let paybackYears = systemCost / annualSavings;
+            if (!currentData || !currentData.normalized) {
+                showStatus('Please load data first', 'error');
+                return;
+            }
 
+            console.log('Calculating ROI...'); // DEBUG
+
+            // Calculate total PV generation
+            const totalPV = currentData.normalized.reduce((sum, d) => sum + (d.pv || 0), 0);
+            const totalLoad = currentData.normalized.reduce((sum, d) => sum + (d.load || 0), 0);
+            const totalGrid = currentData.normalized.reduce((sum, d) => sum + Math.max(0, d.grid || 0), 0);
+
+            // Daily metrics (convert W to kWh: W * hours / 1000 = kWh)
+            const hours = currentData.normalized.length * 5 / 60; // 5-min intervals
+            const avgDailyPV = totalPV * hours / 1000000; // Convert to kWh
+            const avgDailyLoad = totalLoad * hours / 1000000;
+            const avgDailyPurchase = totalGrid * hours / 1000000;
+
+            // Annual calculations
+            const annualPVGeneration = avgDailyPV * 365;
+            const annualGridPurchase = avgDailyPurchase * 365;
+            const annualSavings = (annualPVGeneration - annualGridPurchase) * electricityRate;
+            const paybackYears = annualSavings > 0 ? systemCost / annualSavings : Infinity;
+
+            // 25-year lifetime value
             let lifetimeValue = 0;
             let currentAnnualSavings = annualSavings;
             for (let year = 0; year < 25; year++) {
@@ -924,20 +1095,53 @@
                 currentAnnualSavings *= (1 - (degradation / 100));
             }
 
-            const avgDailyPV = 4;
-            const totalCO2 = (avgDailyPV * 365 * 25 * CONFIG.CO2_PER_KWH / 1000).toFixed(1);
+            // CO2 offset
+            const units = UIManager.getUnitSettings();
+            let totalCO2 = (annualPVGeneration * 25 * CONFIG.CO2_PER_KWH); // kg
+            totalCO2 = UIManager.convertUnit(totalCO2, 'kg', units.emission) / 1000; // Convert to tons or selected unit
 
-            document.getElementById('paybackYears').textContent = paybackYears.toFixed(1);
-            document.getElementById('annualSavings').textContent = '$' + annualSavings.toFixed(0);
-            document.getElementById('lifetimeValue').textContent = '$' + lifetimeValue.toFixed(0);
-            document.getElementById('totalCO2').textContent = totalCO2;
+            console.log('ROI Results:', { paybackYears, annualSavings, lifetimeValue, totalCO2 }); // DEBUG
+
+            document.getElementById('paybackYears').textContent = paybackYears === Infinity ? '∞' : paybackYears.toFixed(1);
+            document.getElementById('annualSavings').textContent = '₱' + annualSavings.toFixed(0);
+            document.getElementById('lifetimeValue').textContent = '₱' + lifetimeValue.toFixed(0);
+            document.getElementById('totalCO2').textContent = totalCO2.toFixed(1);
             document.getElementById('calculatorResults').style.display = 'grid';
 
             showStatus('✓ ROI calculations updated', 'success');
         }
-    </script>
 
-    <!-- Tooltip behavior script (create file below at js/tooltip.js) -->
-    <script src="js/tooltip.js"></script>
+        function setupBatteryOptimizer() {
+            const btn = document.getElementById('batteryOptBtn');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    console.log('Battery optimization clicked'); // DEBUG
+                    if (!batteryOptimization) {
+                        showStatus('Battery optimization data not available. Please load data first.', 'error');
+                        return;
+                    }
+                    const resultsEl = document.getElementById('batteryOptResults');
+                    resultsEl.textContent = BatteryOptimizer.formatBatteryReport(batteryOptimization);
+                    resultsEl.style.display = 'block';
+                    btn.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.6)'; // Active glow
+                    btn.style.borderColor = '#10B981';
+                    showStatus('✓ Battery optimization analysis generated', 'success');
+                });
+            }
+        }
+
+        // Call this in initializeDashboard():
+        setupBatteryOptimizer();
+
+        // Listen for unit changes
+        window.addEventListener('unitsChanged', () => {
+            if (currentData) {
+                UIManager.updateMetricUnits();
+                updateMetrics();
+                renderCharts();
+                renderTable();
+            }
+        });
+    </script>
 </body>
 </html>

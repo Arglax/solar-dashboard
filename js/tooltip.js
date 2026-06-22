@@ -4,7 +4,6 @@
     tooltip.setAttribute('role', 'tooltip');
     document.body.appendChild(tooltip);
 
-    // Move native title into data-tooltip to avoid browser native tooltip
     document.querySelectorAll('[title]').forEach(el => {
         if (!el.dataset.tooltip) {
             el.dataset.tooltip = el.getAttribute('title');
@@ -31,34 +30,39 @@
     }
 
     function positionTooltip(target) {
-        // reset to measure
         tooltip.style.transform = '';
         tooltip.style.left = '0px';
         tooltip.style.top = '0px';
         tooltip.style.maxWidth = '';
 
         const rect = target.getBoundingClientRect();
-        const tw = tooltip.offsetWidth || 240;
-        const th = tooltip.offsetHeight || 48;
+        const tw = tooltip.offsetWidth || 280;
+        const th = tooltip.offsetHeight || 50;
         const margin = 8;
+        const scrollY = window.scrollY || document.documentElement.scrollTop;
 
-        // default: above element, centered
-        let top = rect.top - th - margin;
+        // Try position above first
+        let top = rect.top + scrollY - th - margin;
         let left = rect.left + rect.width / 2 - tw / 2;
+        let arrowPos = 'bottom';
 
-        // if not enough space above, place below
-        if (top < 8) {
-            top = rect.bottom + margin;
-            // move arrow visually handled by CSS (arrow is bottom by default)
+        // Check if tooltip goes above viewport
+        if (rect.top - th - margin < 0) {
+            top = rect.bottom + scrollY + margin;
+            arrowPos = 'top';
         }
 
-        // clamp horizontally
-        left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+        // Clamp horizontally with padding
+        if (left < 8) {
+            left = 8;
+        } else if (left + tw > window.innerWidth - 8) {
+            left = window.innerWidth - tw - 8;
+        }
 
-        // mobile handling: center and use wider max width
+        // Mobile: center and expand width
         if (window.innerWidth <= 520) {
             tooltip.style.left = '50%';
-            tooltip.style.top = (rect.bottom + margin) + 'px';
+            tooltip.style.top = (rect.bottom + scrollY + margin) + 'px';
             tooltip.style.transform = 'translateX(-50%)';
             tooltip.style.maxWidth = 'calc(100% - 32px)';
         } else {
@@ -66,6 +70,8 @@
             tooltip.style.top = top + 'px';
             tooltip.style.transform = '';
         }
+
+        tooltip.dataset.arrowPos = arrowPos;
     }
 
     function attachEventsTo(el) {
@@ -76,9 +82,7 @@
         el.addEventListener('focus', () => showTooltip(el));
         el.addEventListener('blur', () => hideTooltip());
 
-        // Touch: tap to toggle tooltip (does not block other interactions)
         el.addEventListener('touchstart', (e) => {
-            // Prevent accidental double-activation on touch
             if (activeTarget === el) {
                 hideTooltip();
             } else {
@@ -94,14 +98,11 @@
         }, { passive: true });
     }
 
-    // Attach to existing and future nodes with data-tooltip
     function init() {
-        const nodes = document.querySelectorAll('[data-tooltip]');
-        nodes.forEach(attachEventsTo);
+        document.querySelectorAll('[data-tooltip]').forEach(attachEventsTo);
 
-        // observe DOM for dynamically added tooltip triggers
         const ob = new MutationObserver(mutations => {
-            for (const m of mutations) {
+            mutations.forEach(m => {
                 if (m.addedNodes && m.addedNodes.length) {
                     m.addedNodes.forEach(n => {
                         if (n.nodeType === 1) {
@@ -110,7 +111,7 @@
                         }
                     });
                 }
-            }
+            });
         });
         ob.observe(document.body, { childList: true, subtree: true });
     }
