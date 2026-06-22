@@ -393,6 +393,7 @@
     <script src="js/weather-predictor.js"></script>
     <script src="js/ui-manager.js"></script>
     <script src="js/tooltip.js"></script>
+    <script src="js/battery-optimizer.js"></script>
 
     <script>
         let currentData = null;
@@ -490,7 +491,7 @@
                             );
                             console.log('Weekly Forecast Data:', weeklyForecastData); // DEBUG
                             showWeatherIndicator(weatherResult.source);
-                            
+
                             // Generate battery optimization
                             batteryOptimization = BatteryOptimizer.analyze(processed.data, weatherResult.forecast);
                             console.log('Battery Optimization:', batteryOptimization); // DEBUG
@@ -994,22 +995,22 @@
             const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
-            <meta charset="UTF-8">
-            <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
-            <link rel="stylesheet" href="style.css">
-            <style>
-                body { background: #0F1419; color: #E6EDF3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; }
-                .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-            </style>
+                <meta charset="UTF-8">
+                <title>Solar Analytics Report - ${new Date().toLocaleDateString()}</title>
+                <link rel="stylesheet" href="style.css">
+                <style>
+                    body { background: #0F1419; color: #E6EDF3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; }
+                    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+                </style>
 </head>
 <body>
-            <div class="container">
-                <h1>Solar Analytics Report</h1>
-                <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
-                <p><strong>File:</strong> ${currentData.fileName}</p>
-                <hr style="border: 1px solid rgba(148, 163, 184, 0.2); margin: 20px 0;">
-                ${document.querySelector('.container').innerHTML}
-            </div>
+                <div class="container">
+                    <h1>Solar Analytics Report</h1>
+                    <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+                    <p><strong>File:</strong> ${currentData.fileName}</p>
+                    <hr style="border: 1px solid rgba(148, 163, 184, 0.2); margin: 20px 0;">
+                    ${document.querySelector('.container').innerHTML}
+                </div>
 </body>
 </html>`;
 
