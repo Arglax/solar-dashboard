@@ -52,76 +52,34 @@
             arrowPos = 'top';
         }
 
-        // Clamp horizontally with padding
-        if (left < 8) {
-            left = 8;
-        } else if (left + tw > window.innerWidth - 8) {
-            left = window.innerWidth - tw - 8;
-        }
+        // Check horizontal boundaries
+        const maxLeft = window.innerWidth - tw - 10;
+        if (left > maxLeft) left = maxLeft;
+        if (left < 10) left = 10;
 
-        // Mobile: center and expand width
-        if (window.innerWidth <= 520) {
-            tooltip.style.left = '50%';
-            tooltip.style.top = (rect.bottom + scrollY + margin) + 'px';
-            tooltip.style.transform = 'translateX(-50%)';
-            tooltip.style.maxWidth = 'calc(100% - 32px)';
-        } else {
-            tooltip.style.left = left + 'px';
-            tooltip.style.top = top + 'px';
-            tooltip.style.transform = '';
-        }
-
-        tooltip.dataset.arrowPos = arrowPos;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+        tooltip.setAttribute('data-arrow', arrowPos);
     }
 
-    function attachEventsTo(el) {
-        el.addEventListener('pointerenter', () => showTooltip(el));
-        el.addEventListener('pointerleave', () => {
-            hideTimer = setTimeout(hideTooltip, 80);
-        });
-        el.addEventListener('focus', () => showTooltip(el));
-        el.addEventListener('blur', () => hideTooltip());
-
-        el.addEventListener('touchstart', (e) => {
-            if (activeTarget === el) {
-                hideTooltip();
-            } else {
-                showTooltip(el);
-                const onDocTouch = (ev) => {
-                    if (!el.contains(ev.target) && !tooltip.contains(ev.target)) {
-                        hideTooltip();
-                        document.removeEventListener('touchstart', onDocTouch, { capture: true });
-                    }
-                };
-                document.addEventListener('touchstart', onDocTouch, { capture: true });
+    // Setup tooltip event listeners for ALL elements with data-tooltip
+    document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('mouseenter', (e) => {
+            if (e.target.dataset.tooltip) {
+                showTooltip(e.target);
             }
-        }, { passive: true });
-    }
+        }, true);
 
-    function init() {
-        document.querySelectorAll('[data-tooltip]').forEach(attachEventsTo);
+        document.addEventListener('mouseleave', (e) => {
+            if (e.target === activeTarget) {
+                hideTimer = setTimeout(hideTooltip, 100);
+            }
+        }, true);
 
-        const ob = new MutationObserver(mutations => {
-            mutations.forEach(m => {
-                if (m.addedNodes && m.addedNodes.length) {
-                    m.addedNodes.forEach(n => {
-                        if (n.nodeType === 1) {
-                            if (n.matches && n.matches('[data-tooltip]')) attachEventsTo(n);
-                            n.querySelectorAll && n.querySelectorAll('[data-tooltip]').forEach(attachEventsTo);
-                        }
-                    });
-                }
-            });
+        document.addEventListener('click', (e) => {
+            if (activeTarget && e.target !== activeTarget) {
+                hideTooltip();
+            }
         });
-        ob.observe(document.body, { childList: true, subtree: true });
-    }
-
-    window.addEventListener('resize', () => {
-        if (activeTarget) positionTooltip(activeTarget);
     });
-    window.addEventListener('scroll', () => {
-        if (activeTarget) positionTooltip(activeTarget);
-    }, true);
-
-    init();
 })();
