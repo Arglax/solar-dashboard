@@ -1,4 +1,4 @@
->[!WARNING]
+﻿>[!WARNING]
 > I am not, in any way, affiliated to SUNGROW. All tools are created and provided by me with no means of actively profiting and advertising this project, especially outside voluntary donations.
 
 ## ⚡ Solar Analytics: PV + BESS Intelligence Platform
