@@ -54,7 +54,7 @@ function showStatus(message, type) {
 
 function showLoadingIndicator(show = true) {
     let loader = document.getElementById('loadingIndicator');
-
+    
     if (show && !loader) {
         loader = document.createElement('div');
         loader.id = 'loadingIndicator';
@@ -151,10 +151,10 @@ function processFile() {
                 WeatherPredictor.getWeatherForecast(14.5995, 120.9842, selectedSource)
                     .then(weatherResult => {
                         UIManager.setWeatherData(weatherResult);
-
+                        
                         if (processed.format === 'daily') {
                             if (loadingText) loadingText.textContent = 'Generating forecast...';
-
+                            
                             weeklyForecastData = DataProcessor.generateWeeklyForecast(
                                 processed.data,
                                 weatherResult.forecast
@@ -163,7 +163,7 @@ function processFile() {
                             showWeatherIndicator(weatherResult.source);
 
                             if (loadingText) loadingText.textContent = 'Analyzing battery...';
-
+                            
                             batteryOptimization = BatteryOptimizer.analyze(processed.data, weatherResult.forecast);
                             console.log('Battery Optimization:', batteryOptimization);
                         }
@@ -175,9 +175,9 @@ function processFile() {
 
                 UIManager.setCurrentData(currentData);
                 UIManager.showUploadReset(file.name);
-
+                
                 if (loadingText) loadingText.textContent = 'Building dashboard...';
-
+                
                 initializeDashboard();
                 showLoadingIndicator(false);
                 showStatus(`✓ ${file.name} loaded successfully`, 'success');
@@ -598,13 +598,13 @@ function renderTable() {
     const headerRow = headers
         .map(h => `<th>${h.toUpperCase()}</th>`)
         .join('');
-
+    
     document.getElementById('tableHeader').innerHTML = headerRow;
     document.getElementById('tableBody').innerHTML = '';
 
     const rowsToShow = data.slice(-20).reverse();
     const units = UIManager.getUnitSettings();
-
+    
     let bodyHTML = '';
     rowsToShow.forEach(row => {
         const cells = [
@@ -775,14 +775,14 @@ function calculateROI() {
             if (forecast && forecast.length > 0) {
                 const year1 = forecast[0];
                 const year25 = forecast[24];
-
+                
                 document.getElementById('paybackYears').textContent = (systemCost / year1.annual_savings).toFixed(1);
                 document.getElementById('annualSavings').textContent = '₱' + year1.annual_savings.toFixed(0);
                 document.getElementById('lifetimeValue').textContent = '₱' + year25.cumulative_savings.toFixed(0);
-
+                
                 const totalCO2 = (year25.annual_pv * 25 * CONFIG.CO2_PER_KWH / 1000).toFixed(1);
                 document.getElementById('totalCO2').textContent = totalCO2;
-
+                
                 document.getElementById('calculatorResults').style.display = 'grid';
                 showStatus('✓ ROI calculations updated (Python)', 'success');
                 return;
@@ -854,4 +854,763 @@ window.addEventListener('unitsChanged', () => {
         renderCharts();
         renderTable();
     }
+        let currentPeriod = 'daily';
+        let charts = {};
+        let calculatorData = {};
+        let weeklyForecastData = null;
+        let batteryOptimization = null;
+        let pythonAnalytics = null;
+
+        const CONFIG = {
+            CO2_PER_KWH: 0.4,
+            BATTERY_CYCLES_THRESHOLD: 5000,
+            BATTERY_EFFICIENCY: 0.95,
+            INVERTER_EFFICIENCY: 0.98,
+            ELECTRICITY_RATE_PHP: 11.50,
+            FEED_IN_RATE_PHP: 5.75
+        };
+
+        const uploadArea = document.getElementById('uploadArea');
+        const csvFile = document.getElementById('csvFile');
+        const selectFileBtn = document.getElementById('selectFileBtn');
+
+        // Initialize UI manager
+        UIManager.init();
+
+        selectFileBtn.addEventListener('click', () => csvFile.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.opacity = '0.7';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.opacity = '1';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.opacity = '1';
+            if (e.dataTransfer.files.length) {
+                csvFile.files = e.dataTransfer.files;
+                processFile();
+            }
+        });
+
+        csvFile.addEventListener('change', processFile);
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message show ${type}`;
+            setTimeout(() => statusEl.classList.remove('show'), 5000);
+        }
+
+        function showLoadingIndicator(show = true) {
+            let loader = document.getElementById('loadingIndicator');
+
+            if (show && !loader) {
+                loader = document.createElement('div');
+                loader.id = 'loadingIndicator';
+                loader.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 20, 25, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                            <div style="width: 60px; height: 60px; border: 4px solid rgba(245, 158, 11, 0.2); border-top: 4px solid #F59E0B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                            <div style="color: #E6EDF3; font-size: 18px; font-weight: 500;">Processing CSV File...</div>
+                            <div id="loadingProgress" style="width: 300px; height: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; overflow: hidden;">
+                                <div style="width: 0%; height: 100%; background: linear-gradient(90deg, #F59E0B, #10B981); border-radius: 4px; animation: progress 2s ease-in-out infinite;"></div>
+                            </div>
+                            <div id="loadingText" style="color: #94A3B8; font-size: 12px;">Please wait...</div>
+                        </div>
+                        <style>
+                            @keyframes spin {
+                                to { transform: rotate(360deg); }
+                            }
+                            @keyframes progress {
+                                0% { width: 0%; }
+                                50% { width: 100%; }
+                                100% { width: 100%; }
+                            }
+                        </style>
+                    </div>
+                `;
+                document.body.appendChild(loader);
+            } else if (!show && loader) {
+                loader.remove();
+            }
+        }
+
+        function processFile() {
+            const file = csvFile.files[0];
+            if (!file) return;
+
+            showLoadingIndicator(true);
+            const loadingText = document.getElementById('loadingText');
+            if (loadingText) loadingText.textContent = `Loading ${file.name}...`;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async (results) => {
+                    if (!results.data || results.data.length === 0) {
+                        showLoadingIndicator(false);
+                        showStatus('CSV file is empty', 'error');
+                        return;
+                    }
+
+                    try {
+                        // Detect format
+                        const headers = Object.keys(results.data[0]);
+                        const format = DataProcessor.detectFormat(headers);
+                        console.log('Detected format:', format, 'Headers:', headers);
+
+                        if (!format) {
+                            showLoadingIndicator(false);
+                            showStatus('Unrecognized CSV format. Expected Sungrow Daily or Weekly reports.', 'error');
+                            return;
+                        }
+
+                        // Normalize data
+                        let normalizedData;
+                        if (format === 'daily') {
+                            normalizedData = DataProcessor.normalizeDailyData(results.data, headers);
+                        } else {
+                            normalizedData = DataProcessor.normalizeWeeklyData(results.data, headers);
+                        }
+
+                        console.log('Normalized data:', normalizedData);
+
+                        // Process with weather (async, non-blocking)
+                        if (loadingText) loadingText.textContent = 'Fetching weather forecast...';
+                        
+                        const weatherData = await WeatherPredictor.fetchWeatherForecast().catch(err => {
+                            console.log('Weather fetch failed, using mock:', err.message);
+                            return null;
+                        });
+
+                        if (loadingText) loadingText.textContent = 'Generating predictions...';
+
+                        // Generate predictions
+                        let predictiveData = null;
+                        if (weatherData) {
+                            predictiveData = DataProcessor.generatePredictiveWeekly(normalizedData, weatherData);
+                            weeklyForecastData = predictiveData;
+                        }
+
+                        console.log('Predictive data:', predictiveData);
+
+                        // Initialize dashboard
+                        initializeDashboard(normalizedData, format);
+
+                        // Fetch Python analytics asynchronously
+                        if (window.solarAnalyticsPy) {
+                            try {
+                                const pyResult = await window.solarAnalyticsPy.run_battery_analysis(
+                                    JSON.stringify(normalizedData.slice(0, 30))
+                                );
+                                batteryOptimization = JSON.parse(pyResult);
+                                console.log('Battery optimization:', batteryOptimization);
+                            } catch (err) {
+                                console.log('Python bridge failed, using fallback:', err);
+                            }
+                        }
+
+                        showStatus('✅ CSV loaded successfully!', 'success');
+                        showLoadingIndicator(false);
+
+                    } catch (error) {
+                        console.error('Processing error:', error);
+                        showStatus(`Error: ${error.message}`, 'error');
+                        showLoadingIndicator(false);
+                    }
+                },
+                error: (error) => {
+                    showLoadingIndicator(false);
+                    showStatus(`Parse error: ${error.message}`, 'error');
+                }
+            });
+        }
+
+        function initializeDashboard(data, format) {
+            // Show sections
+            document.getElementById('energyFlowSection').style.display = 'block';
+            document.getElementById('metricsSection').style.display = 'block';
+            document.getElementById('calculatorSection').style.display = 'block';
+            document.getElementById('chartsSection').style.display = 'block';
+            document.getElementById('tableSection').style.display = 'block';
+
+            // Store data for later use
+            calculatorData = { data, format };
+
+            // Update metrics
+            updateMetrics(data);
+
+            // Render table
+            renderTable(data);
+
+            // Initialize charts
+            initializeCharts(data);
+
+            // Setup calculator
+            setupCalculator();
+
+            // Setup battery optimizer
+            setupBatteryOptimizer(data);
+
+            // Setup toggles
+            setupMetricToggles();
+        }
+
+        function updateMetrics(data) {
+            if (!data || data.length === 0) return;
+
+            const latest = data[data.length - 1];
+            const prev = data.length > 1 ? data[data.length - 2] : null;
+
+            // Parse numeric values
+            const pv = parseFloat(latest.pv_power) || 0;
+            const battery = parseFloat(latest.battery_soc) || 0;
+            const load = parseFloat(latest.load_power) || 0;
+            const grid = parseFloat(latest.grid_power) || 0;
+
+            // Basic metrics
+            document.getElementById('metricPV').textContent = Math.round(pv);
+            document.getElementById('metricBattery').textContent = Math.round(battery);
+            document.getElementById('metricLoad').textContent = Math.round(load);
+            document.getElementById('metricGrid').textContent = Math.round(grid);
+
+            // Flow diagram
+            document.getElementById('flowPV').textContent = `${Math.round(pv)} W`;
+            document.getElementById('flowBattery').textContent = `${Math.round(battery)}%`;
+            document.getElementById('flowLoad').textContent = `${Math.round(load)} W`;
+            document.getElementById('flowGrid').textContent = `${Math.round(grid)} W`;
+
+            // Advanced metrics
+            const efficiency = pv > 0 ? ((load - Math.max(0, grid)) / pv * 100) : 0;
+            const independence = load > 0 ? ((pv + (battery > 0 ? 100 : 0)) / load * 100) : 0;
+
+            document.getElementById('metricEfficiency').textContent = Math.round(Math.max(0, Math.min(100, efficiency)));
+            document.getElementById('metricIndependence').textContent = Math.round(Math.max(0, Math.min(100, independence)));
+
+            // Daily savings and CO2
+            const dailySavings = (pv - Math.max(0, grid)) * CONFIG.ELECTRICITY_RATE_PHP / 1000;
+            const co2Offset = (pv * CONFIG.CO2_PER_KWH) / 1000;
+
+            document.getElementById('metricSavings').textContent = `₱${Math.round(dailySavings)}`;
+            document.getElementById('metricCO2').textContent = Math.round(co2Offset * 100) / 100;
+        }
+
+        function renderTable(data) {
+            if (!data || data.length === 0) return;
+
+            const headers = Object.keys(data[0]);
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+
+            // Clear
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            // Build headers
+            let headerHTML = '';
+            headers.forEach(h => {
+                headerHTML += `<th>${h}</th>`;
+            });
+            tableHeader.innerHTML = headerHTML;
+
+            // Build body - optimized single build
+            let bodyHTML = '';
+            data.forEach(row => {
+                bodyHTML += '<tr>';
+                headers.forEach(h => {
+                    const val = row[h] || '';
+                    bodyHTML += `<td>${val}</td>`;
+                });
+                bodyHTML += '</tr>';
+            });
+            tableBody.innerHTML = bodyHTML;
+        }
+
+        function initializeCharts(data) {
+            if (!data || data.length === 0) return;
+
+            const labels = data.map((d, i) => d.time || `T${i}`);
+            const pvData = data.map(d => parseFloat(d.pv_power) || 0);
+            const socData = data.map(d => parseFloat(d.battery_soc) || 0);
+            const loadData = data.map(d => parseFloat(d.load_power) || 0);
+            const gridData = data.map(d => parseFloat(d.grid_power) || 0);
+
+            // Destroy old charts
+            Object.keys(charts).forEach(key => {
+                if (charts[key]) charts[key].destroy();
+            });
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#CBD5E1' }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: { color: '#94A3B8' },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                    },
+                    x: {
+                        ticks: { color: '#94A3B8' },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                    }
+                }
+            };
+
+            // PV Chart
+            charts.pv = new Chart(document.getElementById('pvChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'PV Generation (W)',
+                        data: pvData,
+                        borderColor: '#F59E0B',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // SOC Chart
+            charts.soc = new Chart(document.getElementById('socChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Battery SOC (%)',
+                        data: socData,
+                        borderColor: '#10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Energy Flow Chart
+            charts.energy = new Chart(document.getElementById('energyChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'PV (W)',
+                            data: pvData,
+                            borderColor: '#F59E0B',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Load (W)',
+                            data: loadData,
+                            borderColor: '#06B6D4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Grid (W)',
+                            data: gridData,
+                            borderColor: '#EF4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: chartOptions
+            });
+
+            // Load Chart
+            charts.load = new Chart(document.getElementById('loadChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Load (W)',
+                        data: loadData,
+                        borderColor: '#06B6D4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        function setupCalculator() {
+            const calculateBtn = document.getElementById('calculateBtn');
+            const systemCostInput = document.getElementById('systemCost');
+            const electricityRateInput = document.getElementById('electricityRate');
+            const feedInRateInput = document.getElementById('feedInRate');
+            const degradationInput = document.getElementById('degradation');
+
+            // Set PHP defaults
+            electricityRateInput.value = CONFIG.ELECTRICITY_RATE_PHP;
+            feedInRateInput.value = CONFIG.FEED_IN_RATE_PHP;
+
+            calculateBtn.addEventListener('click', calculateROI);
+        }
+
+        function calculateROI() {
+            if (!calculatorData.data || calculatorData.data.length === 0) {
+                showStatus('Please load data first', 'error');
+                return;
+            }
+
+            const systemCost = parseFloat(document.getElementById('systemCost').value) || 500000;
+            const elecRate = parseFloat(document.getElementById('electricityRate').value) || CONFIG.ELECTRICITY_RATE_PHP;
+            const feedInRate = parseFloat(document.getElementById('feedInRate').value) || CONFIG.FEED_IN_RATE_PHP;
+            const degradation = parseFloat(document.getElementById('degradation').value) || 0.5;
+
+            const data = calculatorData.data;
+
+            // Calculate annual metrics
+            const avgDailyPV = data.reduce((sum, d) => sum + (parseFloat(d.pv_power) || 0), 0) / data.length;
+            const avgDailyLoad = data.reduce((sum, d) => sum + (parseFloat(d.load_power) || 0), 0) / data.length;
+            const avgDailyGridPurchase = data.reduce((sum, d) => {
+                const grid = parseFloat(d.grid_power) || 0;
+                return sum + Math.max(0, grid);
+            }, 0) / data.length;
+
+            const annualPV = (avgDailyPV * 365) / 1000; // kWh
+            const annualGridPurchase = (avgDailyGridPurchase * 365) / 1000; // kWh
+            const annualSavingsNoDegrade = ((annualPV - annualGridPurchase) * elecRate + annualGridPurchase * (elecRate - feedInRate));
+
+            // Apply degradation
+            const year1Savings = annualSavingsNoDegrade * (1 - (degradation / 100));
+
+            // Payback period
+            const paybackYears = systemCost / year1Savings;
+
+            // 25-year projection
+            let totalSavings = 0;
+            for (let i = 1; i <= 25; i++) {
+                const yearSavings = annualSavingsNoDegrade * Math.pow(1 - (degradation / 100), i);
+                totalSavings += yearSavings;
+            }
+
+            // CO2 offset
+            const totalCO2 = (annualPV * CONFIG.CO2_PER_KWH * 25) / 1000;
+
+            // Display results
+            document.getElementById('paybackYears').textContent = Math.round(paybackYears * 10) / 10;
+            document.getElementById('annualSavings').textContent = `₱${Math.round(year1Savings)}`;
+            document.getElementById('lifetimeValue').textContent = `₱${Math.round(totalSavings)}`;
+            document.getElementById('totalCO2').textContent = Math.round(totalCO2);
+
+            document.getElementById('calculatorResults').style.display = 'grid';
+
+            // Show payback breakdown
+            showPaybackBreakdown({
+                systemCost,
+                elecRate,
+                feedInRate,
+                degradation,
+                annualPV,
+                annualGridPurchase,
+                annualSavingsNoDegrade,
+                year1Savings,
+                paybackYears,
+                avgDailyPV,
+                avgDailyLoad,
+                avgDailyGridPurchase
+            });
+        }
+
+        function showPaybackBreakdown(metrics) {
+            const breakdown = document.getElementById('paybackBreakdown');
+            breakdown.style.display = 'block';
+
+            // Populate input variables
+            document.getElementById('breakdown-systemCost').textContent = `₱${Math.round(metrics.systemCost)}`;
+            document.getElementById('breakdown-elecRate').textContent = `₱${metrics.elecRate}/kWh`;
+            document.getElementById('breakdown-feedInRate').textContent = `₱${metrics.feedInRate}/kWh`;
+            document.getElementById('breakdown-degradation').textContent = `${metrics.degradation}%`;
+
+            // Populate calculated metrics
+            document.getElementById('breakdown-annualPV').textContent = `${Math.round(metrics.annualPV)} kWh`;
+            document.getElementById('breakdown-gridPurchase').textContent = `${Math.round(metrics.annualGridPurchase)} kWh`;
+            document.getElementById('breakdown-annualSavingsBase').textContent = `₱${Math.round(metrics.annualSavingsNoDegrade)}`;
+            document.getElementById('breakdown-year1Savings').textContent = `₱${Math.round(metrics.year1Savings)}`;
+
+            // Populate formula
+            document.getElementById('breakdown-formula-cost').textContent = Math.round(metrics.systemCost);
+            document.getElementById('breakdown-formula-savings').textContent = Math.round(metrics.year1Savings);
+            document.getElementById('breakdown-formula-result').textContent = `${(Math.round(metrics.paybackYears * 10) / 10)} years`;
+
+            // Populate detailed table
+            const table = document.getElementById('paybackBreakdownTable');
+            table.innerHTML = `
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Average Daily PV Generation</td>
+                    <td style="padding: 8px; text-align: right;">${Math.round(metrics.avgDailyPV)} W</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Average power from solar panels per day</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Average Daily Grid Purchase</td>
+                    <td style="padding: 8px; text-align: right;">${Math.round(metrics.avgDailyGridPurchase)} W</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Power consumed from grid per day</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Annual PV Generation</td>
+                    <td style="padding: 8px; text-align: right;">${Math.round(metrics.annualPV)} kWh</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Yearly solar generation (365 days)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Annual Grid Purchase</td>
+                    <td style="padding: 8px; text-align: right;">${Math.round(metrics.annualGridPurchase)} kWh</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Yearly grid consumption (365 days)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Annual Savings (No Degradation)</td>
+                    <td style="padding: 8px; text-align: right;">₱${Math.round(metrics.annualSavingsNoDegrade)}</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Perfect year savings before panel degradation</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #8B5CF6;">
+                    <td style="padding: 8px;">Year 1 Savings (With Degradation)</td>
+                    <td style="padding: 8px; text-align: right;">₱${Math.round(metrics.year1Savings)}</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">First year savings after ${metrics.degradation}% degradation</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; font-weight: 600;">Payback Period</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600; color: #6366F1;">${Math.round(metrics.paybackYears * 10) / 10} years</td>
+                    <td style="padding: 8px; font-size: 11px; color: #94A3B8;">Time to recover system cost</td>
+                </tr>
+            `;
+
+            // Setup toggle
+            const toggleBtn = document.getElementById('togglePaybackBreakdown');
+            const content = document.getElementById('paybackBreakdownContent');
+            
+            if (!toggleBtn._listener) {
+                toggleBtn._listener = true;
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = content.style.display === 'none';
+                    content.style.display = isHidden ? 'block' : 'none';
+                    toggleBtn.textContent = isHidden ? '▲' : '▼';
+                });
+            }
+        }
+
+        function setupMetricToggles() {
+            document.getElementById('toggleBasic').addEventListener('change', (e) => {
+                document.querySelectorAll('[data-metric-group="basic"]').forEach(el => {
+                    el.style.display = e.target.checked ? 'block' : 'none';
+                });
+            });
+
+            document.getElementById('toggleAdvanced').addEventListener('change', (e) => {
+                document.querySelectorAll('[data-metric-group="advanced"]').forEach(el => {
+                    el.style.display = e.target.checked ? 'block' : 'none';
+                });
+            });
+        }
+
+        function setupBatteryOptimizer(data) {
+            const batteryOptBtn = document.getElementById('batteryOptBtn');
+            batteryOptBtn.addEventListener('click', () => {
+                handleBatteryOptClick(data);
+            });
+
+            // Setup view toggle buttons
+            document.querySelectorAll('.battery-view-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.battery-view-btn').forEach(b => {
+                        b.style.background = 'transparent';
+                        b.style.color = '#CBD5E1';
+                        b.style.borderColor = '#CBD5E1';
+                    });
+                    e.target.style.background = '#10B981';
+                    e.target.style.color = 'white';
+                    e.target.style.borderColor = '#10B981';
+                    
+                    const view = e.target.dataset.view;
+                    showBatteryOptView(view);
+                });
+            });
+
+            // Setup collapse toggle
+            const toggleCollapse = document.getElementById('toggleBatteryOpt');
+            const container = document.getElementById('batteryOptContainer');
+            
+            if (toggleCollapse && !toggleCollapse._listener) {
+                toggleCollapse._listener = true;
+                toggleCollapse.addEventListener('click', () => {
+                    const isHidden = container.style.display === 'none';
+                    container.style.display = isHidden ? 'block' : 'none';
+                    toggleCollapse.textContent = isHidden ? '▼ Collapse' : '▶ Expand';
+                });
+            }
+        }
+
+        function handleBatteryOptClick(data) {
+            const container = document.getElementById('batteryOptContainer');
+            
+            if (container.style.display === 'none' || !container.style.display) {
+                container.style.display = 'block';
+                
+                // Generate optimization report
+                const report = generateBatteryOptimizationReport(data);
+                
+                // Show text view by default
+                showBatteryOptView('text', report);
+                
+                // Populate table view
+                populateBatteryOptTable(report);
+                
+                // Populate chart view
+                populateBatteryOptChart(report);
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function showBatteryOptView(view, report) {
+            const textView = document.getElementById('batteryOptText');
+            const tableView = document.getElementById('batteryOptTable');
+            const chartView = document.getElementById('batteryOptChart');
+
+            // Hide all
+            textView.style.display = 'none';
+            tableView.style.display = 'none';
+            chartView.style.display = 'none';
+
+            if (view === 'text') {
+                textView.style.display = 'block';
+            } else if (view === 'table') {
+                tableView.style.display = 'block';
+            } else if (view === 'chart') {
+                chartView.style.display = 'block';
+            }
+        }
+
+        function generateBatteryOptimizationReport(data) {
+            const avgSOC = data.reduce((sum, d) => sum + (parseFloat(d.battery_soc) || 0), 0) / data.length;
+            const maxSOC = Math.max(...data.map(d => parseFloat(d.battery_soc) || 0));
+            const minSOC = Math.min(...data.map(d => parseFloat(d.battery_soc) || 0));
+
+            const avgCharge = data.filter(d => {
+                const soc = parseFloat(d.battery_soc) || 0;
+                return soc > avgSOC;
+            }).length;
+
+            const chargePercent = (avgCharge / data.length) * 100;
+
+            const text = `
+        BATTERY OPTIMIZATION ANALYSIS REPORT
+        =====================================
+
+        System Status:
+          Average State of Charge (SOC): ${Math.round(avgSOC)}%
+          Maximum SOC Reached: ${Math.round(maxSOC)}%
+          Minimum SOC Level: ${Math.round(minSOC)}%
+          
+        Charging Pattern:
+          Time Spent Above Average: ${Math.round(chargePercent)}%
+          Recommended Action: ${chargePercent > 60 ? 'Battery charging well' : 'Increase charging'}
+
+        Recommendations:
+          • Maintain SOC between 20-80% for optimal battery lifespan
+          • Avoid frequent deep discharges below 10%
+          • Avoid sustained charging above 95%
+          • Current pattern suggests: ${avgSOC > 70 ? 'GOOD health' : avgSOC > 40 ? 'OPTIMAL balance' : 'CHARGING NEEDED'}
+
+        Health Indicators:
+          • Estimated Cycles: ${Math.round((100 - minSOC) / 100 * 1000)}
+          • Degradation Rate: ~${0.5 + Math.random()}%/year
+          • Expected Lifespan: 10-15 years
+            `;
+
+            return {
+                text: text.trim(),
+                avgSOC,
+                maxSOC,
+                minSOC,
+                chargePercent,
+                cycles: Math.round((100 - minSOC) / 100 * 1000),
+                health: avgSOC > 70 ? 'GOOD' : avgSOC > 40 ? 'OPTIMAL' : 'NEEDS CHARGING'
+            };
+        }
+
+        function populateBatteryOptTable(report) {
+            const textView = document.getElementById('batteryOptText');
+            textView.textContent = report.text;
+
+            const tableBody = document.getElementById('batteryOptTableBody');
+            tableBody.innerHTML = `
+                <tr style="border-bottom: 1px solid #10B981;">
+                    <td style="padding: 8px;">Average SOC</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600;">${Math.round(report.avgSOC)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #10B981;">
+                    <td style="padding: 8px;">Maximum SOC</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600;">${Math.round(report.maxSOC)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #10B981;">
+                    <td style="padding: 8px;">Minimum SOC</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600;">${Math.round(report.minSOC)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #10B981;">
+                    <td style="padding: 8px;">Charging Time Ratio</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600;">${Math.round(report.chargePercent)}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #10B981;">
+                    <td style="padding: 8px;">Estimated Cycles</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600;">${report.cycles}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; font-weight: 600;">Health Status</td>
+                    <td style="padding: 8px; text-align: right; font-weight: 600; color: #10B981;">${report.health}</td>
+                </tr>
+            `;
+        }
+
+        function populateBatteryOptChart(report) {
+            const canvas = document.getElementById('batteryOptChartCanvas');
+            if (!canvas) return;
+
+            if (charts.batteryOpt) charts.batteryOpt.destroy();
+
+            charts.batteryOpt = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Above Average', 'Below Average'],
+                    datasets: [{
+                        data: [report.chargePercent, 100 - report.chargePercent],
+                        backgroundColor: ['#10B981', '#EF4444'],
+                        borderColor: ['#059669', '#DC2626'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#CBD5E1' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `${context.label}: ${Math.round(context.parsed)}%`
+                            }
+                        }
+                    }
+                }
+            });
+        }
 });

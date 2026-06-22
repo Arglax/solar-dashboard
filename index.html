@@ -1,9 +1,10 @@
 ﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Analytics | PV + BESS Monitor v0.1.0</title>
+    <title>Solar Analytics | PV + BESS Monitor</title>
     <link rel="stylesheet" href="css/styles.css">
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
@@ -19,8 +20,8 @@
             <a href="#" class="header-brand">
                 <span class="header-logo">⚡</span>
                 <div>
-                    <div class="header-title">Solar Analytics</div>
-                    <div class="header-subtitle">PV + BESS Intelligence Platform v0.1.0</div>
+                    <div class="header-title">Arglax's Solar Analytics</div>
+                    <div class="header-subtitle">PV + BESS Intelligence Platform v0.1.1</div>
                 </div>
             </a>
         </div>
@@ -92,7 +93,7 @@
                     <span>Basic Metrics</span>
                 </label>
                 <label class="toggle-label">
-                    <input type="checkbox" id="toggleAdvanced" checked data-group="advanced">
+                    <input type="checkbox" id="toggleAdvanced" data-group="advanced">
                     <span>Advanced Analytics</span>
                 </label>
             </div>
@@ -184,7 +185,7 @@
                         </div>
                         <span class="info-icon" data-tooltip="Estimated cost saved today. Calculated from solar energy generated minus grid purchases, times average electricity rate.">i</span>
                     </div>
-                    <div class="metric-value" id="metricSavings">$0</div>
+                    <div class="metric-value" id="metricSavings">₱0</div>
                     <div class="metric-unit">PHP/day</div>
                 </div>
 
@@ -214,7 +215,38 @@
 
                 <div style="grid-column: 1 / -1; margin-top: var(--spacing-md);">
                     <button class="btn btn-primary" id="batteryOptBtn" style="width: 100%;">🔋 Battery Optimization Analysis</button>
-                    <div id="batteryOptResults" style="display: none; margin-top: var(--spacing-md); padding: var(--spacing-md); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md); border-left: 3px solid #10B981; font-family: monospace; font-size: 12px; color: #CBD5E1; white-space: pre-wrap; overflow-x: auto;"></div>
+                    
+                    <!-- Enhanced Battery Optimizer Container -->
+                    <div id="batteryOptContainer" style="display: none; margin-top: var(--spacing-md);">
+                        <!-- View Toggle Buttons -->
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                            <button class="battery-view-btn active" data-view="text" style="padding: 6px 12px; border: 1px solid #10B981; background: #10B981; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📝 Text View</button>
+                            <button class="battery-view-btn" data-view="table" style="padding: 6px 12px; border: 1px solid #CBD5E1; background: transparent; color: #CBD5E1; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📊 Table View</button>
+                            <button class="battery-view-btn" data-view="chart" style="padding: 6px 12px; border: 1px solid #CBD5E1; background: transparent; color: #CBD5E1; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📈 Chart View</button>
+                            <button id="toggleBatteryOpt" style="margin-left: auto; padding: 6px 12px; border: 1px solid #94A3B8; background: transparent; color: #94A3B8; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">▼ Collapse</button>
+                        </div>
+
+                        <!-- Text View -->
+                        <div id="batteryOptText" style="display: none; margin-top: 12px; padding: var(--spacing-md); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md); border-left: 3px solid #10B981; font-family: monospace; font-size: 12px; color: #CBD5E1; white-space: pre-wrap; overflow-x: auto;"></div>
+
+                        <!-- Table View -->
+                        <div id="batteryOptTable" style="display: none; margin-top: 12px; overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #CBD5E1;">
+                                <thead style="background: rgba(16, 185, 129, 0.1); border-bottom: 1px solid #10B981;">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left; border-right: 1px solid #10B981;">Metric</th>
+                                        <th style="padding: 8px; text-align: right;">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="batteryOptTableBody"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Chart View -->
+                        <div id="batteryOptChart" style="display: none; margin-top: 12px; position: relative; height: 300px; width: 100%;">
+                            <canvas id="batteryOptChartCanvas"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -229,24 +261,24 @@
                 <div class="calculator-grid">
                     <div class="input-group">
                         <label>
-                            System Cost ($)
-                            <span class="info-icon" data-tooltip="Total installation cost of your solar + battery system">i</span>
+                            System Cost (₱)
+                            <span class="info-icon" data-tooltip="Total installation cost of your solar + battery system in Philippine Pesos">i</span>
                         </label>
-                        <input type="number" id="systemCost" placeholder="0" value="10000">
+                        <input type="number" id="systemCost" placeholder="0" value="500000">
                     </div>
                     <div class="input-group">
                         <label>
-                            Electricity Rate ($/kWh)
-                            <span class="info-icon" data-tooltip="Average local electricity cost per kilowatt-hour">i</span>
+                            Electricity Rate (₱/kWh)
+                            <span class="info-icon" data-tooltip="Average local electricity cost per kilowatt-hour in Philippine Pesos">i</span>
                         </label>
-                        <input type="number" id="electricityRate" placeholder="0.12" value="0.12" step="0.01">
+                        <input type="number" id="electricityRate" placeholder="11.50" value="11.50" step="0.01">
                     </div>
                     <div class="input-group">
                         <label>
-                            Feed-in Rate ($/kWh)
-                            <span class="info-icon" data-tooltip="Rate received for exporting excess solar to the grid (if applicable)">i</span>
+                            Feed-in Rate (₱/kWh)
+                            <span class="info-icon" data-tooltip="Rate received for exporting excess solar to the grid (if applicable) in Philippine Pesos">i</span>
                         </label>
-                        <input type="number" id="feedInRate" placeholder="0.06" value="0.06" step="0.01">
+                        <input type="number" id="feedInRate" placeholder="5.75" value="5.75" step="0.01">
                     </div>
                     <div class="input-group">
                         <label>
@@ -257,6 +289,8 @@
                     </div>
                 </div>
                 <button class="btn btn-primary" id="calculateBtn" style="width: 100%; margin-top: var(--spacing-md);">Calculate ROI & Projections</button>
+                
+                <!-- ROI Results with Payback Breakdown -->
                 <div class="calculator-results" id="calculatorResults" style="display: none; margin-top: var(--spacing-md);">
                     <div class="result-item">
                         <div class="result-label">Payback Period</div>
@@ -265,18 +299,99 @@
                     </div>
                     <div class="result-item">
                         <div class="result-label">Annual Savings</div>
-                        <div class="result-value" id="annualSavings">$0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">USD/year</div>
+                        <div class="result-value" id="annualSavings">₱0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">PHP/year</div>
                     </div>
                     <div class="result-item">
                         <div class="result-label">25-Year Value</div>
-                        <div class="result-value" id="lifetimeValue">$0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">USD</div>
+                        <div class="result-value" id="lifetimeValue">₱0</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">PHP</div>
                     </div>
                     <div class="result-item">
                         <div class="result-label">CO₂ Offset (25 yrs)</div>
                         <div class="result-value" id="totalCO2">0</div>
                         <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">tons</div>
+                    </div>
+                </div>
+
+                <!-- Payback Breakdown Panel -->
+                <div id="paybackBreakdown" style="display: none; margin-top: var(--spacing-lg); padding: var(--spacing-md); background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); border-radius: var(--radius-md); border-left: 3px solid #6366F1;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                        <span style="font-size: 18px;">🔍</span>
+                        <h3 style="color: #E6EDF3; font-size: 14px; font-weight: 600; margin: 0;">Payback Computation Breakdown</h3>
+                        <button id="togglePaybackBreakdown" style="margin-left: auto; background: none; border: none; color: #6366F1; font-size: 20px; cursor: pointer;">▼</button>
+                    </div>
+                    
+                    <div id="paybackBreakdownContent" style="display: none;">
+                        <!-- Input Variables -->
+                        <div style="margin-bottom: 16px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📥 Input Variables</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">System Cost</div>
+                                    <div id="breakdown-systemCost" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Electricity Rate</div>
+                                    <div id="breakdown-elecRate" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0/kWh</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Feed-in Rate</div>
+                                    <div id="breakdown-feedInRate" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0/kWh</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Degradation</div>
+                                    <div id="breakdown-degradation" style="color: #6366F1; font-weight: 600; font-size: 14px;">0%</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Calculated Metrics -->
+                        <div style="margin-bottom: 16px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📊 Calculated Metrics</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                <div style="padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual PV Generation</div>
+                                    <div id="breakdown-annualPV" style="color: #10B981; font-weight: 600; font-size: 14px;">0 kWh</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Grid Purchase</div>
+                                    <div id="breakdown-gridPurchase" style="color: #10B981; font-weight: 600; font-size: 14px;">0 kWh</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Savings (No Degradation)</div>
+                                    <div id="breakdown-annualSavingsBase" style="color: #F59E0B; font-weight: 600; font-size: 14px;">₱0</div>
+                                </div>
+                                <div style="padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 12px;">
+                                    <div style="color: #94A3B8; margin-bottom: 4px;">Year 1 Savings</div>
+                                    <div id="breakdown-year1Savings" style="color: #F59E0B; font-weight: 600; font-size: 14px;">₱0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payback Derivation -->
+                        <div style="margin-bottom: 16px;">
+                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📐 Payback Period Formula</div>
+                            <div style="padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px; font-size: 11px; color: #CBD5E1; line-height: 1.6; font-family: monospace;">
+                                <div><span style="color: #A78BFA;">Payback Period (years)</span> = System Cost / Annual Savings</div>
+                                <div style="margin-top: 8px;"><span style="color: #A78BFA;">Payback Period (years)</span> = ₱<span id="breakdown-formula-cost">0</span> / ₱<span id="breakdown-formula-savings">0</span> = <span id="breakdown-formula-result" style="color: #A78BFA; font-weight: 600;">0 years</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Summary Table -->
+                        <div>
+                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📋 Detailed Breakdown</div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #CBD5E1;">
+                                <thead style="background: rgba(139, 92, 246, 0.1); border-bottom: 1px solid #8B5CF6;">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left;">Metric</th>
+                                        <th style="padding: 8px; text-align: right;">Value</th>
+                                        <th style="padding: 8px; text-align: left; max-width: 150px;">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paybackBreakdownTable"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -387,7 +502,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights and ROI analysis</p>
+        <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights and ROI analysis | Currently a Work In Progress(W.I.P) . Contact arglaxaqw@gmail.com</p>
     </footer>
 
     <!-- PyScript for Data Science & Predictive Analysis -->
