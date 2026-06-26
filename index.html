@@ -1,17 +1,1040 @@
-﻿<!DOCTYPE html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Solar Analytics | PV + BESS Monitor</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+    
+    <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        /* ============================================================
+           ROOT VARIABLES & RESET
+           ============================================================ */
+        :root {
+            --bg-void: #0F1419;
+            --bg-surface: #1A2332;
+            --bg-card: #212D3E;
+            --bg-hover: #2A3F52;
+            --accent-solar: #F59E0B;
+            --accent-solar-dim: #D97706;
+            --accent-battery: #10B981;
+            --accent-load: #6366F1;
+            --accent-grid: #8B5CF6;
+            --accent-warning: #EF4444;
+            --accent-success: #10B981;
+            --text-primary: #F8FAFC;
+            --text-secondary: #CBD5E1;
+            --text-muted: #94A3B8;
+            --border-subtle: rgba(148, 163, 184, 0.1);
+            --border-mid: rgba(148, 163, 184, 0.2);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 20px rgba(245, 158, 11, 0.15);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-2xl: 48px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            background-color: var(--bg-void);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ============================================================
+           HEADER
+           ============================================================ */
+        .header {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: var(--spacing-md) var(--spacing-lg);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-lg);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .header-logo {
+            font-size: 28px;
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.2));
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* ============================================================
+           MAIN CONTAINER
+           ============================================================ */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--spacing-lg);
+        }
+
+        .section {
+            margin-bottom: var(--spacing-xl);
+            scroll-margin-top: 100px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: var(--spacing-md);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        /* ============================================================
+           UPLOAD SECTION
+           ============================================================ */
+        .upload-section {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(16, 185, 129, 0.05) 100%);
+            border: 2px dashed var(--border-mid);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .upload-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--spacing-md);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: var(--spacing-lg) 0;
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent-solar);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            opacity: 0.7;
+        }
+
+        .upload-text {
+            text-align: center;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .upload-text strong {
+            color: var(--accent-solar);
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-size: 16px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-reset-container {
+            padding: var(--spacing-md);
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: var(--radius-md);
+            border-left: 3px solid #10B981;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ============================================================
+           BUTTONS
+           ============================================================ */
+        .btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            white-space: nowrap;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-solar) 0%, var(--accent-solar-dim) 100%);
+            color: #000;
+            font-weight: 700;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-mid);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--accent-solar);
+            color: var(--accent-solar);
+        }
+
+        .btn-sm {
+            padding: var(--spacing-xs) var(--spacing-sm);
+            font-size: 12px;
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ============================================================
+           METRICS GRID
+           ============================================================ */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-md);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.1), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .metric-card:hover {
+            border-color: var(--border-mid);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-4px);
+        }
+
+        .metric-card:hover::before {
+            opacity: 1;
+        }
+
+        .metric-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .metric-header > div {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            flex: 1;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .metric-unit {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .metric-icon {
+            font-size: 20px;
+            opacity: 0.8;
+        }
+
+        .info-icon {
+            cursor: help;
+            user-select: none;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        /* ============================================================
+           TOOLTIP
+           ============================================================ */
+        .tooltip-popup {
+            position: fixed;
+            z-index: 9999;
+            max-width: 280px;
+            background: rgba(15, 20, 25, 0.98);
+            color: #E6EDF3;
+            padding: 10px 12px;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(2, 6, 23, 0.8);
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            word-break: break-word;
+            display: none;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tooltip-popup.visible {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* ============================================================
+           ENERGY FLOW
+           ============================================================ */
+        .energy-flow-container {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .energy-flow {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: var(--spacing-lg);
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .energy-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--spacing-md);
+            text-align: center;
+        }
+
+        .energy-node-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            background: linear-gradient(135deg, var(--bg-hover) 0%, var(--bg-surface) 100%);
+            border: 2px solid var(--border-mid);
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .energy-node.pv .energy-node-icon {
+            border-color: var(--accent-solar);
+            color: var(--accent-solar);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.1);
+        }
+
+        .energy-node.battery .energy-node-icon {
+            border-color: var(--accent-battery);
+            color: var(--accent-battery);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.08) 100%);
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.1);
+        }
+
+        .energy-node.load .energy-node-icon {
+            border-color: var(--accent-load);
+            color: var(--accent-load);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0.08) 100%);
+            box-shadow: 0 0 16px rgba(99, 102, 241, 0.1);
+        }
+
+        .energy-node.grid .energy-node-icon {
+            border-color: var(--accent-grid);
+            color: var(--accent-grid);
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+            box-shadow: 0 0 16px rgba(139, 92, 246, 0.1);
+        }
+
+        .energy-node-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .energy-node-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* ============================================================
+           CHARTS
+           ============================================================ */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .chart-card {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .chart-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--spacing-md);
+            gap: var(--spacing-sm);
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .chart-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            min-height: 200px;
+        }
+
+        canvas {
+            max-height: 100%;
+        }
+
+        /* ============================================================
+           CALCULATOR
+           ============================================================ */
+        .calculator-section {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .calculator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+
+        .input-group label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
+
+        .input-group input,
+        .input-group select {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-card);
+            border: 1px solid var(--border-mid);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
+            outline: none;
+            border-color: var(--accent-solar);
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+        }
+
+        .calculator-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: var(--spacing-md);
+            padding: var(--spacing-lg) 0;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .result-item {
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            text-align: center;
+        }
+
+        .result-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .result-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent-success);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ============================================================
+           CONTROLS
+           ============================================================ */
+        .controls-bar {
+            display: flex;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .period-selector,
+        .export-selector {
+            display: flex;
+            gap: var(--spacing-sm);
+            flex-wrap: wrap;
+        }
+
+        .period-btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            border: 1px solid var(--border-mid);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .period-btn:hover {
+            border-color: var(--accent-solar);
+            color: var(--accent-solar);
+        }
+
+        .period-btn.active {
+            background: var(--accent-solar);
+            border-color: var(--accent-solar);
+            color: #000;
+        }
+
+        /* ============================================================
+           STATUS MESSAGE
+           ============================================================ */
+        .status-message {
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-lg);
+            font-size: 13px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-message.success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-battery);
+            border-left: 3px solid var(--accent-battery);
+        }
+
+        .status-message.error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--accent-warning);
+            border-left: 3px solid var(--accent-warning);
+        }
+
+        .status-message.info {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: var(--accent-load);
+            border-left: 3px solid var(--accent-load);
+        }
+
+        /* ============================================================
+           TABLE
+           ============================================================ */
+        .table-container {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            margin-bottom: var(--spacing-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        thead {
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+            border-bottom: 1px solid var(--border-mid);
+            position: sticky;
+            top: 0;
+        }
+
+        th {
+            padding: var(--spacing-md);
+            text-align: left;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: var(--spacing-md);
+            border-top: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        tbody tr:hover {
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        /* ============================================================
+           FOOTER
+           ============================================================ */
+        .footer {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-card) 100%);
+            border-top: 1px solid var(--border-subtle);
+            padding: var(--spacing-lg);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-top: var(--spacing-2xl);
+        }
+
+        /* ============================================================
+           UNIT TOGGLE MENU
+           ============================================================ */
+        #unitToggleMenu {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 8000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toggle-menu-btn {
+            background: linear-gradient(135deg, var(--accent-load) 0%, var(--accent-grid) 100%);
+            border: none;
+            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .toggle-menu-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+        }
+
+        .toggle-menu-content {
+            background: rgba(15, 20, 25, 0.98);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-md);
+            min-width: 220px;
+            box-shadow: var(--shadow-lg);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+
+        .toggle-menu-content.show {
+            display: flex;
+        }
+
+        .toggle-item {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-xs);
+        }
+
+        .toggle-item label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .unit-select {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .unit-select:hover,
+        .unit-select:focus {
+            border-color: var(--accent-load);
+            outline: none;
+            background: rgba(30, 41, 59, 1);
+        }
+
+        .toggle-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-load);
+        }
+
+        /* ============================================================
+           LOADING SPINNER
+           ============================================================ */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(245, 158, 11, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-solar);
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ============================================================
+           RESPONSIVE DESIGN
+           ============================================================ */
+        @media (max-width: 768px) {
+            :root {
+                font-size: 15px;
+            }
+
+            .container {
+                padding: var(--spacing-md);
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: var(--spacing-sm);
+                text-align: center;
+            }
+
+            .header-title {
+                font-size: 16px;
+            }
+
+            .header-subtitle {
+                font-size: 10px;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .energy-flow {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .calculator-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-title {
+                font-size: 12px;
+            }
+
+            .metric-value {
+                font-size: 24px;
+            }
+
+            .energy-node-icon {
+                width: 70px;
+                height: 70px;
+                font-size: 28px;
+            }
+
+            .period-selector,
+            .export-selector {
+                justify-content: center;
+                width: 100%;
+            }
+
+            .controls-bar {
+                flex-direction: column;
+            }
+
+            .chart-container {
+                height: 280px;
+            }
+
+            #unitToggleMenu {
+                bottom: 16px;
+                right: 16px;
+            }
+
+            .toggle-menu-btn {
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+            }
+        }
+
+        @media (max-width: 520px) {
+            :root {
+                font-size: 14px;
+            }
+
+            .container {
+                padding: var(--spacing-sm);
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-value {
+                font-size: 20px;
+            }
+
+            .header-title {
+                font-size: 14px;
+            }
+
+            .header-logo {
+                font-size: 24px;
+            }
+
+            .btn {
+                font-size: 12px;
+                padding: var(--spacing-xs) var(--spacing-sm);
+            }
+
+            .energy-node-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+
+            .energy-flow {
+                gap: var(--spacing-md);
+            }
+
+            .chart-container {
+                height: 250px;
+            }
+
+            .upload-text {
+                font-size: 12px;
+            }
+
+            .upload-text strong {
+                font-size: 14px;
+            }
+
+            #unitToggleMenu {
+                bottom: 12px;
+                right: 12px;
+            }
+
+            .toggle-menu-btn {
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
+            }
+
+            .toggle-menu-content {
+                min-width: 160px;
+                padding: var(--spacing-sm);
+            }
+
+            .tooltip-popup {
+                max-width: 90vw;
+            }
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -21,7 +1044,7 @@
                 <span class="header-logo">⚡</span>
                 <div>
                     <div class="header-title">Arglax's Solar Analytics</div>
-                    <div class="header-subtitle">PV + BESS Intelligence Platform v0.1.1</div>
+                    <div class="header-subtitle">PV + BESS Intelligence Platform v1.0.1</div>
                 </div>
             </a>
         </div>
@@ -34,17 +1057,21 @@
             <div class="upload-section">
                 <div class="upload-area" id="uploadArea">
                     <div class="upload-icon">📊</div>
-                    <div>
-                        <div class="upload-text">
-                            <strong>Import Solar Data</strong>
-                            Click or drag CSV file here
-                        </div>
-                        <div style="font-size: 12px; color: var(--text-muted);">
-                            Daily or Weekly reports from Sungrow
-                        </div>
+                    <div class="upload-text">
+                        <strong>Import Solar Data</strong>
+                        Click or drag CSV file here
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted); text-align: center;">
+                        Daily or Weekly reports from Sungrow
                     </div>
                     <button class="btn btn-primary" id="selectFileBtn">Choose CSV File</button>
                     <input type="file" id="csvFile" accept=".csv" />
+                </div>
+            </div>
+            <div id="uploadResetContainer" class="upload-reset-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: var(--spacing-md); flex-wrap: wrap;">
+                    <span id="loadedFileName" style="font-size: 13px; color: var(--text-primary);">File loaded</span>
+                    <button id="resetDataBtn" class="btn btn-secondary btn-sm">🔄 Clear Data</button>
                 </div>
             </div>
             <div id="statusMessage" class="status-message"></div>
@@ -86,21 +1113,20 @@
         <section class="section" id="metricsSection" style="display: none;">
             <h2 class="section-title">Current Status & Performance</h2>
 
-            <!-- Toggle Controls for Metrics -->
-            <div class="toggle-group" style="margin-bottom: var(--spacing-lg);">
-                <label class="toggle-label">
-                    <input type="checkbox" id="toggleBasic" checked data-group="basic">
+            <div style="margin-bottom: var(--spacing-lg); display: flex; gap: var(--spacing-md); flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-card); border: 1px solid var(--border-mid); border-radius: var(--radius-md); cursor: pointer; font-size: 12px;">
+                    <input type="checkbox" id="toggleBasic" checked data-group="basic" style="width: 16px; height: 16px; cursor: pointer;">
                     <span>Basic Metrics</span>
                 </label>
-                <label class="toggle-label">
-                    <input type="checkbox" id="toggleAdvanced" data-group="advanced">
+                <label style="display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-card); border: 1px solid var(--border-mid); border-radius: var(--radius-md); cursor: pointer; font-size: 12px;">
+                    <input type="checkbox" id="toggleAdvanced" data-group="advanced" style="width: 16px; height: 16px; cursor: pointer;">
                     <span>Advanced Analytics</span>
                 </label>
             </div>
 
             <div class="metrics-grid" id="metricsGrid">
-                <!-- Basic Metrics Group -->
-                <div class="metric-card solar" data-metric-group="basic">
+                <!-- Basic Metrics -->
+                <div class="metric-card" data-metric-group="basic">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">☀️</div>
@@ -110,10 +1136,9 @@
                     </div>
                     <div class="metric-value" id="metricPV">0</div>
                     <div class="metric-unit">W</div>
-                    <div class="metric-change" id="pvChange" style="display: none;"></div>
                 </div>
 
-                <div class="metric-card battery" data-metric-group="basic">
+                <div class="metric-card" data-metric-group="basic">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">🔋</div>
@@ -123,10 +1148,9 @@
                     </div>
                     <div class="metric-value" id="metricBattery">0</div>
                     <div class="metric-unit">%</div>
-                    <div class="metric-change" id="batteryChange" style="display: none;"></div>
                 </div>
 
-                <div class="metric-card load" data-metric-group="basic">
+                <div class="metric-card" data-metric-group="basic">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">⚙️</div>
@@ -136,10 +1160,9 @@
                     </div>
                     <div class="metric-value" id="metricLoad">0</div>
                     <div class="metric-unit">W</div>
-                    <div class="metric-change" id="loadChange" style="display: none;"></div>
                 </div>
 
-                <div class="metric-card grid" data-metric-group="basic">
+                <div class="metric-card" data-metric-group="basic">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">🔌</div>
@@ -149,103 +1172,69 @@
                     </div>
                     <div class="metric-value" id="metricGrid">0</div>
                     <div class="metric-unit">W</div>
-                    <div class="metric-change" id="gridChange" style="display: none;"></div>
                 </div>
 
-                <!-- Advanced Metrics Group -->
-                <div class="metric-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 100%);" data-metric-group="advanced">
+                <!-- Advanced Metrics -->
+                <div class="metric-card" data-metric-group="advanced" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.03) 100%); display: none;">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">📈</div>
                             <div class="metric-label">Energy Efficiency</div>
                         </div>
-                        <span class="info-icon" data-tooltip="% of generated solar energy being used (vs. wasted). Higher = better system optimization. Calculated as: (Load - Grid Purchase) / PV Generation × 100%">i</span>
+                        <span class="info-icon" data-tooltip="% of generated solar energy being used (vs. wasted).">i</span>
                     </div>
                     <div class="metric-value" id="metricEfficiency">0</div>
                     <div class="metric-unit">%</div>
                 </div>
 
-                <div class="metric-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.02) 100%);" data-metric-group="advanced">
+                <div class="metric-card" data-metric-group="advanced" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%); display: none;">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">🎯</div>
                             <div class="metric-label">Grid Independence</div>
                         </div>
-                        <span class="info-icon" data-tooltip="% of your energy needs met by solar + battery (not from grid). 100% = completely off-grid.">i</span>
+                        <span class="info-icon" data-tooltip="% of energy needs met by solar + battery (not from grid).">i</span>
                     </div>
                     <div class="metric-value" id="metricIndependence">0</div>
                     <div class="metric-unit">%</div>
                 </div>
 
-                <div class="metric-card" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%);" data-metric-group="advanced">
+                <div class="metric-card" data-metric-group="advanced" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.03) 100%); display: none;">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">💰</div>
                             <div class="metric-label">Daily Savings</div>
                         </div>
-                        <span class="info-icon" data-tooltip="Estimated cost saved today. Calculated from solar energy generated minus grid purchases, times average electricity rate.">i</span>
+                        <span class="info-icon" data-tooltip="Estimated cost saved today.">i</span>
                     </div>
                     <div class="metric-value" id="metricSavings">₱0</div>
                     <div class="metric-unit">PHP/day</div>
                 </div>
 
-                <div class="metric-card" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(139, 92, 246, 0.02) 100%);" data-metric-group="advanced">
+                <div class="metric-card" data-metric-group="advanced" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(139, 92, 246, 0.03) 100%); display: none;">
                     <div class="metric-header">
                         <div>
                             <div class="metric-icon">🌍</div>
                             <div class="metric-label">CO₂ Offset</div>
                         </div>
-                        <span class="info-icon" data-tooltip="Equivalent CO₂ not emitted thanks to your solar generation. 1 kWh solar ≈ 0.4 kg CO₂ avoided.">i</span>
+                        <span class="info-icon" data-tooltip="Equivalent CO₂ not emitted thanks to your solar generation.">i</span>
                     </div>
                     <div class="metric-value" id="metricCO2">0</div>
                     <div class="metric-unit">kg/day</div>
                 </div>
 
-                <div class="metric-card" style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.05) 0%, rgba(244, 63, 94, 0.02) 100%);" data-metric-group="advanced">
-                    <div class="metric-header">
-                        <div>
-                            <div class="metric-icon">🔄</div>
-                            <div class="metric-label">Battery Health</div>
-                        </div>
-                        <span class="info-icon" data-tooltip="Estimated battery cycle count and health status. Indicates battery degradation over time.">i</span>
-                    </div>
-                    <div class="metric-value" id="metricBatteryHealth">Good</div>
-                    <div class="metric-unit" id="batteryHealthPercent">95%</div>
-                </div>
-
                 <div style="grid-column: 1 / -1; margin-top: var(--spacing-md);">
-                    <button class="btn btn-primary" id="batteryOptBtn" style="width: 100%;">🔋 Battery Optimization Analysis</button>
-                    
-                    <!-- Enhanced Battery Optimizer Container -->
-                    <div id="batteryOptContainer" style="display: none; margin-top: var(--spacing-md);">
-                        <!-- View Toggle Buttons -->
-                        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-                            <button class="battery-view-btn active" data-view="text" style="padding: 6px 12px; border: 1px solid #10B981; background: #10B981; color: white; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📝 Text View</button>
-                            <button class="battery-view-btn" data-view="table" style="padding: 6px 12px; border: 1px solid #CBD5E1; background: transparent; color: #CBD5E1; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📊 Table View</button>
-                            <button class="battery-view-btn" data-view="chart" style="padding: 6px 12px; border: 1px solid #CBD5E1; background: transparent; color: #CBD5E1; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">📈 Chart View</button>
-                            <button id="toggleBatteryOpt" style="margin-left: auto; padding: 6px 12px; border: 1px solid #94A3B8; background: transparent; color: #94A3B8; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">▼ Collapse</button>
+                    <button class="btn btn-primary" id="batteryOptBtn" style="width: 100%; justify-content: center;">🔋 Battery Optimization Analysis</button>
+                    <div id="batteryOptContainer" style="display: none; margin-top: var(--spacing-md); padding: var(--spacing-md); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md); border-left: 3px solid #10B981;">
+                        <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); flex-wrap: wrap;">
+                            <button class="battery-view-btn active" data-view="text" style="padding: var(--spacing-xs) var(--spacing-sm); border: 1px solid #10B981; background: #10B981; color: #000; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; font-weight: 600;">📝 Text</button>
+                            <button class="battery-view-btn" data-view="table" style="padding: var(--spacing-xs) var(--spacing-sm); border: 1px solid rgba(148, 163, 184, 0.3); background: transparent; color: #CBD5E1; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; font-weight: 600;">📊 Table</button>
+                            <button class="battery-view-btn" data-view="chart" style="padding: var(--spacing-xs) var(--spacing-sm); border: 1px solid rgba(148, 163, 184, 0.3); background: transparent; color: #CBD5E1; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; font-weight: 600;">📈 Chart</button>
+                            <button id="toggleBatteryOpt" style="margin-left: auto; padding: var(--spacing-xs) var(--spacing-sm); border: 1px solid rgba(148, 163, 184, 0.3); background: transparent; color: #94A3B8; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; font-weight: 600;">▼ Collapse</button>
                         </div>
-
-                        <!-- Text View -->
-                        <div id="batteryOptText" style="display: none; margin-top: 12px; padding: var(--spacing-md); background: rgba(16, 185, 129, 0.1); border-radius: var(--radius-md); border-left: 3px solid #10B981; font-family: monospace; font-size: 12px; color: #CBD5E1; white-space: pre-wrap; overflow-x: auto;"></div>
-
-                        <!-- Table View -->
-                        <div id="batteryOptTable" style="display: none; margin-top: 12px; overflow-x: auto;">
-                            <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #CBD5E1;">
-                                <thead style="background: rgba(16, 185, 129, 0.1); border-bottom: 1px solid #10B981;">
-                                    <tr>
-                                        <th style="padding: 8px; text-align: left; border-right: 1px solid #10B981;">Metric</th>
-                                        <th style="padding: 8px; text-align: right;">Value</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="batteryOptTableBody"></tbody>
-                            </table>
-                        </div>
-
-                        <!-- Chart View -->
-                        <div id="batteryOptChart" style="display: none; margin-top: 12px; position: relative; height: 300px; width: 100%;">
-                            <canvas id="batteryOptChartCanvas"></canvas>
-                        </div>
+                        <div id="batteryOptText" style="display: block; margin-top: var(--spacing-sm); padding: var(--spacing-md); background: rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm); font-family: 'Monaco', monospace; font-size: 11px; color: #CBD5E1; white-space: pre-wrap; overflow-x: auto; max-height: 300px; overflow-y: auto;"></div>
+                        <div id="batteryOptTable" style="display: none; margin-top: var(--spacing-sm); overflow-x: auto;"></div>
+                        <div id="batteryOptChart" style="display: none; margin-top: var(--spacing-sm); height: 250px; position: relative;"><canvas id="batteryOptChartCanvas"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -260,176 +1249,61 @@
             <div class="calculator-section">
                 <div class="calculator-grid">
                     <div class="input-group">
-                        <label>
-                            System Cost (₱)
-                            <span class="info-icon" data-tooltip="Total installation cost of your solar + battery system in Philippine Pesos">i</span>
-                        </label>
+                        <label>System Cost (₱) <span class="info-icon" data-tooltip="Total installation cost in PHP">i</span></label>
                         <input type="number" id="systemCost" placeholder="0" value="500000">
                     </div>
                     <div class="input-group">
-                        <label>
-                            Electricity Rate (₱/kWh)
-                            <span class="info-icon" data-tooltip="Average local electricity cost per kilowatt-hour in Philippine Pesos">i</span>
-                        </label>
+                        <label>Electricity Rate (₱/kWh) <span class="info-icon" data-tooltip="Average local electricity cost per kWh in PHP">i</span></label>
                         <input type="number" id="electricityRate" placeholder="11.50" value="11.50" step="0.01">
                     </div>
                     <div class="input-group">
-                        <label>
-                            Feed-in Rate (₱/kWh)
-                            <span class="info-icon" data-tooltip="Rate received for exporting excess solar to the grid (if applicable) in Philippine Pesos">i</span>
-                        </label>
+                        <label>Feed-in Rate (₱/kWh) <span class="info-icon" data-tooltip="Rate for exporting solar to the grid in PHP">i</span></label>
                         <input type="number" id="feedInRate" placeholder="5.75" value="5.75" step="0.01">
                     </div>
                     <div class="input-group">
-                        <label>
-                            Annual Degradation (%)
-                            <span class="info-icon" data-tooltip="Typical solar panels degrade ~0.5% per year. Battery: ~2% per year.">i</span>
-                        </label>
+                        <label>Annual Degradation (%) <span class="info-icon" data-tooltip="Typical solar: 0.5%, Battery: 2% per year">i</span></label>
                         <input type="number" id="degradation" placeholder="0.5" value="0.5" step="0.1">
                     </div>
                 </div>
-                <button class="btn btn-primary" id="calculateBtn" style="width: 100%; margin-top: var(--spacing-md);">Calculate ROI & Projections</button>
+                <button class="btn btn-primary" id="calculateBtn" style="width: 100%; justify-content: center; margin-top: var(--spacing-lg);">Calculate ROI & Projections</button>
                 
-                <!-- ROI Results with Payback Breakdown -->
-                <div class="calculator-results" id="calculatorResults" style="display: none; margin-top: var(--spacing-md);">
+                <div class="calculator-results" id="calculatorResults" style="display: none; margin-top: var(--spacing-lg);">
                     <div class="result-item">
                         <div class="result-label">Payback Period</div>
                         <div class="result-value" id="paybackYears">0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">years</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">years</div>
                     </div>
                     <div class="result-item">
                         <div class="result-label">Annual Savings</div>
                         <div class="result-value" id="annualSavings">₱0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">PHP/year</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">PHP/year</div>
                     </div>
                     <div class="result-item">
                         <div class="result-label">25-Year Value</div>
                         <div class="result-value" id="lifetimeValue">₱0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">PHP</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">PHP</div>
                     </div>
                     <div class="result-item">
                         <div class="result-label">CO₂ Offset (25 yrs)</div>
                         <div class="result-value" id="totalCO2">0</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">tons</div>
-                    </div>
-                </div>
-
-                <!-- Payback Breakdown Panel -->
-                <div id="paybackBreakdown" style="display: none; margin-top: var(--spacing-lg); padding: var(--spacing-md); background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%); border-radius: var(--radius-md); border-left: 3px solid #6366F1;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                        <span style="font-size: 18px;">🔍</span>
-                        <h3 style="color: #E6EDF3; font-size: 14px; font-weight: 600; margin: 0;">Payback Computation Breakdown</h3>
-                        <button id="togglePaybackBreakdown" style="margin-left: auto; background: none; border: none; color: #6366F1; font-size: 20px; cursor: pointer;">▼</button>
-                    </div>
-                    
-                    <div id="paybackBreakdownContent" style="display: none;">
-                        <!-- Input Variables -->
-                        <div style="margin-bottom: 16px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📥 Input Variables</div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">System Cost</div>
-                                    <div id="breakdown-systemCost" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Electricity Rate</div>
-                                    <div id="breakdown-elecRate" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0/kWh</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Feed-in Rate</div>
-                                    <div id="breakdown-feedInRate" style="color: #6366F1; font-weight: 600; font-size: 14px;">₱0/kWh</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(99, 102, 241, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Degradation</div>
-                                    <div id="breakdown-degradation" style="color: #6366F1; font-weight: 600; font-size: 14px;">0%</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Calculated Metrics -->
-                        <div style="margin-bottom: 16px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📊 Calculated Metrics</div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                <div style="padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual PV Generation</div>
-                                    <div id="breakdown-annualPV" style="color: #10B981; font-weight: 600; font-size: 14px;">0 kWh</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Grid Purchase</div>
-                                    <div id="breakdown-gridPurchase" style="color: #10B981; font-weight: 600; font-size: 14px;">0 kWh</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Annual Savings (No Degradation)</div>
-                                    <div id="breakdown-annualSavingsBase" style="color: #F59E0B; font-weight: 600; font-size: 14px;">₱0</div>
-                                </div>
-                                <div style="padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; font-size: 12px;">
-                                    <div style="color: #94A3B8; margin-bottom: 4px;">Year 1 Savings</div>
-                                    <div id="breakdown-year1Savings" style="color: #F59E0B; font-weight: 600; font-size: 14px;">₱0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Payback Derivation -->
-                        <div style="margin-bottom: 16px;">
-                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📐 Payback Period Formula</div>
-                            <div style="padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px; font-size: 11px; color: #CBD5E1; line-height: 1.6; font-family: monospace;">
-                                <div><span style="color: #A78BFA;">Payback Period (years)</span> = System Cost / Annual Savings</div>
-                                <div style="margin-top: 8px;"><span style="color: #A78BFA;">Payback Period (years)</span> = ₱<span id="breakdown-formula-cost">0</span> / ₱<span id="breakdown-formula-savings">0</span> = <span id="breakdown-formula-result" style="color: #A78BFA; font-weight: 600;">0 years</span></div>
-                            </div>
-                        </div>
-
-                        <!-- Summary Table -->
-                        <div>
-                            <div style="font-size: 12px; font-weight: 600; color: #94A3B8; text-transform: uppercase; margin-bottom: 8px;">📋 Detailed Breakdown</div>
-                            <table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #CBD5E1;">
-                                <thead style="background: rgba(139, 92, 246, 0.1); border-bottom: 1px solid #8B5CF6;">
-                                    <tr>
-                                        <th style="padding: 8px; text-align: left;">Metric</th>
-                                        <th style="padding: 8px; text-align: right;">Value</th>
-                                        <th style="padding: 8px; text-align: left; max-width: 150px;">Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="paybackBreakdownTable"></tbody>
-                            </table>
-                        </div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">tons</div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Period Selector & Charts -->
+        <!-- Charts Section -->
         <section class="section" id="chartsSection" style="display: none;">
             <h2 class="section-title">Performance Data & Analytics</h2>
 
             <div class="controls-bar">
                 <div class="period-selector" id="periodSelector">
                     <button class="period-btn active" data-period="daily">Daily Report</button>
-                    <button class="period-btn" data-period="weekly">Weekly Report (Predictive)</button>
+                    <button class="period-btn" data-period="weekly">Weekly Report</button>
                 </div>
                 <div class="export-selector">
-                    <button class="btn btn-secondary btn-sm" id="exportDashboard" title="Export entire dashboard as PNG">📥 Dashboard</button>
-                    <button class="btn btn-secondary btn-sm" id="exportHTML" title="Export dashboard as standalone HTML">📄 HTML</button>
+                    <button class="btn btn-secondary btn-sm" id="exportDashboard" title="Export dashboard as PNG">📥 Dashboard</button>
                     <button class="btn btn-secondary btn-sm" id="exportCSV" title="Download data as CSV">📊 CSV</button>
-                </div>
-            </div>
-
-            <div id="weatherIndicator" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 6px; font-size: 12px; color: #F59E0B; border-left: 3px solid #F59E0B;">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <span>📊 Weekly forecast using <span id="weatherSource">real weather</span> data</span>
-                    <select id="weatherSourceSelect" class="unit-select" style="font-size: 11px; padding: 4px 6px;">
-                        <option value="auto">Auto-select</option>
-                        <option value="openmeteo">Open-Meteo</option>
-                        <option value="weatherapi">WeatherAPI.com</option>
-                        <option value="weatherbit">WeatherBit</option>
-                        <option value="wttr">wttr.in</option>
-                        <option value="openweathermap">OpenWeatherMap</option>
-                        <option value="tomorrow">Tomorrow.io</option>
-                        <option value="climacell">ClimaCell</option>
-                        <option value="weathergov">Weather.gov</option>
-                        <option value="visualcrossing">Visual Crossing</option>
-                        <option value="mock">Mock Data</option>
-                    </select>
-                    <button id="retryWeatherBtn" class="btn btn-sm btn-secondary" style="margin: 0; padding: 4px 8px; font-size: 11px;">🔄 Retry</button>
                 </div>
             </div>
 
@@ -502,18 +1376,15 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights and ROI analysis | Currently a Work In Progress(W.I.P) . Contact arglaxaqw@gmail.com</p>
+        <p>Solar Analytics Dashboard | Import CSV data from Sungrow for real-time insights | Contact: arglaxaqw@gmail.com</p>
     </footer>
 
-    <!-- PyScript for Data Science & Predictive Analysis -->
-    <py-script src="py/solar_analytics.py"></py-script>
-
-    <!-- New JS modules (in order) -->
+    <!-- JavaScript Modules -->
+    <script src="js/tooltip.js"></script>
     <script src="js/data-processor.js"></script>
     <script src="js/weather-predictor.js"></script>
-    <script src="js/ui-manager.js"></script>
-    <script src="js/tooltip.js"></script>
     <script src="js/battery-optimizer.js"></script>
+    <script src="js/ui-manager.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

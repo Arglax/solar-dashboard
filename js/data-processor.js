@@ -1,63 +1,109 @@
+// ============================================================
+// Data Processor - CSV parsing and format detection
+// ============================================================
+
 const DataProcessor = (() => {
-    // Detect and normalize CSV format
+    /**
+     * Detect CSV format (daily or weekly)
+     */
     function detectFormat(headers) {
-        const hasDaily = headers.some(h => h.includes('Battery SOC(%)'));
-        const hasWeekly = headers.some(h => h.includes('Battery charge(kWh)'));
-
-        if (hasDaily) return 'daily';
-        if (hasWeekly) return 'weekly';
-        return null;
+        const headerStr = headers.join(',').toLowerCase();
+        
+        const dailyPatterns = ['soc', 'battery soc', 'battery(', 'load(w)', 'pv(w)'];
+        const weeklyPatterns = ['battery charge', 'battery discharge', 'feed-in', 'purchase', 'pv(kwh)'];
+        
+        const isDailyMatch = dailyPatterns.some(p => headerStr.includes(p));
+        const isWeeklyMatch = weeklyPatterns.some(p => headerStr.includes(p));
+        
+        if (isDailyMatch) return 'daily';
+        if (isWeeklyMatch) return 'weekly';
+        
+        // Fallback: try to infer from column count and names
+        if (headers.length <= 6) return 'daily';
+        return 'weekly';
     }
 
-    // Normalize daily data
+    /**
+     * Normalize daily data
+     */
     function normalizeDailyData(data, headers) {
-        return data.map(row => ({
-            time: row.Time || '',
-            pv: parseFloat(row['PV(W)'] || 0) || 0,
-            grid: parseFloat(row['Grid(W)'] || 0) || 0,
-            battery: parseFloat(row['Battery(W)'] || 0) || 0,
-            load: parseFloat(row['Load(W)'] || 0) || 0,
-            soc: parseFloat(row['Battery SOC(%)'] || 0) || 0
-        }));
+        return data.map((row, idx) => {
+            // Find matching columns (case-insensitive)
+            const findCol = (patterns) => {
+                const key = Object.keys(row).find(k => 
+                    patterns.some(p => k.toLowerCase().includes(p.toLowerCase()))
+                );
+                return key ? row[key] : 0;
+            };
+
+            return {
+                time: findCol(['time', 'timestamp']) || `${idx}:00`,
+                pv: parseFloat(findCol(['pv', 'generation', 'solar'])) || 0,
+                grid: parseFloat(findCol(['grid', 'import', 'export'])) || 0,
+                battery: parseFloat(findCol(['battery', 'batt', 'bms'])) || 0,
+                load: parseFloat(findCol(['load', 'consumption', 'usage'])) || 0,
+                soc: parseFloat(findCol(['soc', 'state of charge'])) || 0
+            };
+        }).filter(row => Object.values(row).some(v => v !== 0 && v !== ''));
     }
 
-    // Normalize weekly data
+    /**
+     * Normalize weekly data
+     */
     function normalizeWeeklyData(data, headers) {
-        return data.map(row => ({
-            date: row.Time || '',
-            pv: parseFloat(row['PV(kWh)'] || 0) || 0,
-            purchase: parseFloat(row['Energy purchase(kWh)'] || 0) || 0,
-            feedIn: parseFloat(row['Feed-in(kWh)'] || 0) || 0,
-            charge: parseFloat(row['Battery charge(kWh)'] || 0) || 0,
-            discharge: parseFloat(row['Battery discharge(kWh)'] || 0) || 0,
-            load: parseFloat(row['Load(kWh)'] || 0) || 0
-        }));
+        return data.map(row => {
+            const findCol = (patterns) => {
+                const key = Object.keys(row).find(k => 
+                    patterns.some(p => k.toLowerCase().includes(p.toLowerCase()))
+                );
+                return key ? row[key] : 0;
+            };
+
+            return {
+                date: findCol(['date', 'time', 'day']) || '',
+                pv: parseFloat(findCol(['pv', 'generation', 'solar'])) || 0,
+                purchase: parseFloat(findCol(['purchase', 'import', 'grid purchase'])) || 0,
+                feedIn: parseFloat(findCol(['feed', 'feed-in', 'export'])) || 0,
+                charge: parseFloat(findCol(['charge', 'battery charge'])) || 0,
+                discharge: parseFloat(findCol(['discharge', 'battery discharge'])) || 0,
+                load: parseFloat(findCol(['load', 'consumption', 'usage'])) || 0
+            };
+        }).filter(row => Object.values(row).some(v => v !== 0 && v !== ''));
     }
 
-    // Generate predictive weekly data based on daily data
-    function generatePredictiveWeekly(dailyData, weatherForecast) {
+    /**
+     * Generate predictive weekly forecast from daily data
+     */
+    function generatePredictiveWeekly(dailyData, weatherForecast = []) {
+        if (!dailyData || dailyData.length === 0) return [];
+
         const weeklyData = [];
         const daysInWeek = 7;
+
+        // Calculate daily statistics
+        const avgPVPerInterval = dailyData.reduce((sum, d) => sum + d.pv, 0) / dailyData.length;
+        const avgLoadPerInterval = dailyData.reduce((sum, d) => sum + d.load, 0) / dailyData.length;
+        
+        // Convert intervals to daily (assuming 5-minute intervals = 288 per day)
+        const dailyPVkWh = (avgPVPerInterval * 288) / 1000;
+        const dailyLoadkWh = (avgLoadPerInterval * 288) / 1000;
 
         for (let i = 0; i < daysInWeek; i++) {
             const weather = weatherForecast[i] || {};
             const cloudCover = weather.cloudCover || 0.5;
             const temp = weather.temp || 25;
 
-            // Calculate PV generation with weather factor
-            const avgDailyPV = dailyData.reduce((sum, d) => sum + d.pv, 0) / dailyData.length;
-            const tempFactor = Math.max(0.8, 1 - (temp - 25) * 0.02); // Temp affects efficiency
-            const weatherFactor = Math.max(0.1, 1 - cloudCover); // Cloud cover affects output
-            const predictedPV = (avgDailyPV * 12 * 5 / 60 / 1000) * tempFactor * weatherFactor; // Convert to kWh
+            // Weather adjustments
+            const tempFactor = Math.max(0.8, 1 - Math.abs(temp - 25) * 0.01);
+            const weatherFactor = Math.max(0.2, 1 - cloudCover);
+            
+            const predictedPV = dailyPVkWh * weatherFactor * tempFactor;
+            const predictedLoad = dailyLoadkWh;
 
-            // Calculate battery behavior
-            const avgLoad = dailyData.reduce((sum, d) => sum + d.load, 0) / dailyData.length;
-            const avgDailyLoad = (avgLoad * 12 * 5 / 60 / 1000); // Convert to kWh
-
-            const charge = Math.max(0, predictedPV * 0.6); // 60% goes to charging
-            const discharge = Math.max(0, avgDailyLoad * 0.4); // 40% from battery
-            const purchase = Math.max(0, avgDailyLoad - predictedPV);
-            const feedIn = Math.max(0, predictedPV - avgDailyLoad);
+            const charge = Math.max(0, (predictedPV - predictedLoad) * 0.6);
+            const discharge = Math.max(0, (predictedLoad - predictedPV) * 0.4);
+            const purchase = Math.max(0, predictedLoad - predictedPV);
+            const feedIn = Math.max(0, predictedPV - predictedLoad);
 
             weeklyData.push({
                 date: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -66,7 +112,7 @@ const DataProcessor = (() => {
                 feedIn: Math.round(feedIn * 100) / 100,
                 charge: Math.round(charge * 100) / 100,
                 discharge: Math.round(discharge * 100) / 100,
-                load: Math.round(avgDailyLoad * 100) / 100,
+                load: Math.round(predictedLoad * 100) / 100,
                 isPredicted: true
             });
         }
@@ -75,26 +121,62 @@ const DataProcessor = (() => {
     }
 
     return {
+        /**
+         * Main processing function
+         */
         processFile(rawData, headers) {
+            if (!rawData || !headers || headers.length === 0) {
+                throw new Error('Invalid data or headers');
+            }
+
             const format = detectFormat(headers);
 
             if (!format) {
-                throw new Error('Unrecognized CSV format. Please check your file.');
+                throw new Error('Unrecognized CSV format. Expected daily (Time, PV, Load, SOC) or weekly (Date, PV, Purchase, Feed-in)');
             }
 
-            const normalized = format === 'daily'
-                ? normalizeDailyData(rawData, headers)
-                : normalizeWeeklyData(rawData, headers);
+            let normalized;
+            if (format === 'daily') {
+                normalized = normalizeDailyData(rawData, headers);
+            } else {
+                normalized = normalizeWeeklyData(rawData, headers);
+            }
+
+            if (normalized.length === 0) {
+                throw new Error('No valid data rows found after processing');
+            }
 
             return {
                 format,
                 data: normalized,
-                rawHeaders: headers
+                rawHeaders: headers,
+                rowCount: normalized.length
             };
         },
 
-        generateWeeklyForecast(dailyData, weatherForecast) {
+        /**
+         * Generate weekly forecast from daily data
+         */
+        generateWeeklyForecast(dailyData, weatherForecast = []) {
             return generatePredictiveWeekly(dailyData, weatherForecast);
+        },
+
+        /**
+         * Calculate daily statistics
+         */
+        calculateDailyStats(data) {
+            if (!data || data.length === 0) return null;
+
+            return {
+                totalPV: data.reduce((sum, d) => sum + (d.pv || 0), 0),
+                totalLoad: data.reduce((sum, d) => sum + (d.load || 0), 0),
+                avgPV: data.reduce((sum, d) => sum + (d.pv || 0), 0) / data.length,
+                avgLoad: data.reduce((sum, d) => sum + (d.load || 0), 0) / data.length,
+                maxPV: Math.max(...data.map(d => d.pv || 0)),
+                maxLoad: Math.max(...data.map(d => d.load || 0)),
+                minPV: Math.min(...data.map(d => d.pv || 0)),
+                minLoad: Math.min(...data.map(d => d.load || 0))
+            };
         }
     };
 })();
